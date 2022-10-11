@@ -2,12 +2,12 @@
 # yarn lockfile v1
 
 
-"@acala-network/bodhi@^2.4.10":
-  version "2.4.10"
-  resolved "https://registry.yarnpkg.com/@acala-network/bodhi/-/bodhi-2.4.10.tgz#8389b69d1f8e29155038937961ca1b5867b1d7cc"
-  integrity sha512-EIGl3Gyp4Jr8rt/3zMeoFFcfXpiobs2y0E4CwUs24m7QJXW+wFUmw1t3ODJP1rkJYsNM7WX6KZPaPb5gKWYSPQ==
+"@acala-network/bodhi@^2.4.21":
+  version "2.5.2"
+  resolved "https://registry.yarnpkg.com/@acala-network/bodhi/-/bodhi-2.5.2.tgz#65befd4f2cce54a218b2be6d65dfe8f94ce340f1"
+  integrity sha512-70lAOCLwnXRwogjbJpHMF2dHKBFHLaA2Z1IRonqnwmkRjtWvPFqx1rNB7bcRY8Vm+If19OwKGgeoRIXYmFyTlQ==
   dependencies:
-    "@acala-network/eth-providers" "2.4.10"
+    "@acala-network/eth-providers" "2.5.2"
     "@ethersproject/abstract-provider" "~5.5.0"
     "@ethersproject/abstract-signer" "~5.5.0"
     "@ethersproject/address" "~5.5.0"
@@ -16,44 +16,45 @@
     "@ethersproject/logger" "~5.5.0"
     "@ethersproject/properties" "~5.5.0"
     "@ethersproject/strings" "~5.5.0"
-    "@polkadot/api" "~8.1.1"
+    "@polkadot/api" "8.1.1"
     "@polkadot/keyring" "^9.0.1"
-    "@polkadot/types" "~8.1.1"
+    "@polkadot/types" "8.1.1"
     "@polkadot/util" "^9.0.1"
     "@polkadot/util-crypto" "^9.0.1"
     "@types/bn.js" "~5.1.0"
     bn.js "~5.2.0"
     ethers "~5.5.0"
 
-"@acala-network/contracts@~4.2.0":
-  version "4.2.0"
-  resolved "https://registry.yarnpkg.com/@acala-network/contracts/-/contracts-4.2.0.tgz#171040db0117bdd9b33bb0a449b4a940363de75e"
-  integrity sha512-IT63HPWsHPeHy8zCr71wAztghrFdscLzZlYdcvewEuBGWkRpHFlZ4i32kADYPv6UAT9ew7en6nqOWJa48CaliQ==
+"@acala-network/contracts@~4.3.4":
+  version "4.3.4"
+  resolved "https://registry.yarnpkg.com/@acala-network/contracts/-/contracts-4.3.4.tgz#f37cf54894c72b762df539042a61f90b10b68600"
+  integrity sha512-oBgXGUjRW+lRo9TWGtCB1+OpEOFfhxW//wReb7V/YdbEElVvYuKw3lmfly/eZ/mdBgqxA3eXxNW0AgXiyOn2NQ==
 
-"@acala-network/eth-providers@2.4.10":
-  version "2.4.10"
-  resolved "https://registry.yarnpkg.com/@acala-network/eth-providers/-/eth-providers-2.4.10.tgz#8c1f28a721fa9dee4ef5f5530d81ed0f1b58f55c"
-  integrity sha512-iXFmYN/JCVNUx5YMx4mcmLJs4v9I6+ikkzjTZl0WOyZyaw0csHAJavFUq1ycrTXCh0x/CpV7yVdaqTizphaFAg==
+"@acala-network/eth-providers@2.5.2":
+  version "2.5.2"
+  resolved "https://registry.yarnpkg.com/@acala-network/eth-providers/-/eth-providers-2.5.2.tgz#f489bd89dddb55bb29f5d9a1b4564b149acf1bc6"
+  integrity sha512-PvRFIlCnJtVJFjP5GEdquEdhhWQbapD0S3pIZsvb49XNSlmU7IV2cy3Cm3HrZPVRzZrB2En49s1LDPHFQFPXWg==
   dependencies:
-    "@acala-network/contracts" "~4.2.0"
-    "@acala-network/eth-transactions" "2.4.10"
-    "@acala-network/types" "~4.1.2-11"
+    "@acala-network/contracts" "~4.3.4"
+    "@acala-network/eth-transactions" "2.5.2"
+    "@acala-network/types" "~4.1.5"
     "@ethersproject/abstract-provider" "~5.5.0"
     "@ethersproject/address" "~5.5.0"
     "@ethersproject/bignumber" "~5.5.0"
     "@ethersproject/bytes" "~5.5.0"
     "@ethersproject/contracts" "~5.5.0"
+    "@ethersproject/keccak256" "~5.5.0"
     "@ethersproject/logger" "~5.5.0"
     "@ethersproject/networks" "~5.5.0"
     "@ethersproject/properties" "~5.5.0"
     "@ethersproject/providers" "~5.5.0"
     "@ethersproject/transactions" "~5.5.0"
     "@ethersproject/wallet" "~5.5.0"
-    "@polkadot/api" "~8.1.1"
-    "@polkadot/api-augment" "~8.1.1"
-    "@polkadot/api-derive" "~8.1.1"
+    "@polkadot/api" "8.1.1"
+    "@polkadot/api-augment" "8.1.1"
+    "@polkadot/api-derive" "8.1.1"
     "@polkadot/keyring" "^9.0.1"
-    "@polkadot/types" "~8.1.1"
+    "@polkadot/types" "8.1.1"
     "@polkadot/util" "^9.0.1"
     "@polkadot/util-crypto" "^9.0.1"
     ethers "~5.5.0"
@@ -61,10 +62,10 @@
     graphql-request "~3.6.1"
     lru-cache "~7.8.2"
 
-"@acala-network/eth-transactions@2.4.10":
-  version "2.4.10"
-  resolved "https://registry.yarnpkg.com/@acala-network/eth-transactions/-/eth-transactions-2.4.10.tgz#0884dababc337d16c16fce5daef2f3df51039ac2"
-  integrity sha512-na8aZRptQxhyZWAFihg540n4N1IL/K/1T2w2AC8NzbxhNGeKygKCwhtspw0CCaJhIdkjjmebvy7cB4b9xPBqEQ==
+"@acala-network/eth-transactions@2.5.2":
+  version "2.5.2"
+  resolved "https://registry.yarnpkg.com/@acala-network/eth-transactions/-/eth-transactions-2.5.2.tgz#5b329e490e5e08a3d481ae4f97e4007b6c9702d9"
+  integrity sha512-1xFdO8x3/piX7sYZntTnaNvS393a0FK3m7DvciMxKwfDvAYOJNKagO4qokZEqZZvQQxWj1usRG7j2NKFYTMxaw==
   dependencies:
     "@ethersproject/address" "~5.5.0"
     "@ethersproject/bignumber" "~5.5.0"
@@ -77,19 +78,19 @@
     "@ethersproject/wallet" "~5.5.0"
     "@polkadot/util-crypto" "^9.0.1"
 
-"@acala-network/type-definitions@4.1.2-19":
-  version "4.1.2-19"
-  resolved "https://registry.yarnpkg.com/@acala-network/type-definitions/-/type-definitions-4.1.2-19.tgz#b9cc75da4ed8990e802054336e60aec6f8b42cba"
-  integrity sha512-0OUYk+84Y3dBaJkPMilQv9ny11TYZCaezjoUVpiXFnmvoYHDfvhejfnwDd/meaN+WUdbvrXmaFBh+NKyVzhMBg==
+"@acala-network/type-definitions@4.1.5":
+  version "4.1.5"
+  resolved "https://registry.yarnpkg.com/@acala-network/type-definitions/-/type-definitions-4.1.5.tgz#c02624ba9bb637588ddd184a4ce35ab7d9de2bf6"
+  integrity sha512-XwXtKf5ESfzGk32N1sE3MlBtnamz2JZYtjB6KcKe9eOyv+3lowQvRn4Z347rNSEp+tpenZWnLwBXk4XWhdiSoQ==
   dependencies:
     "@open-web3/orml-type-definitions" "^1.1.4"
 
-"@acala-network/types@~4.1.2-11":
-  version "4.1.2-19"
-  resolved "https://registry.yarnpkg.com/@acala-network/types/-/types-4.1.2-19.tgz#fce6c806de09af77771cabd187b8494f01c6e458"
-  integrity sha512-3JcnTNasJalgAe1dIwaW4FyGXOZtvRi7TXCVS0WubLhAgDRTxI6LEMNrngOs8pyMohapbTEL702tU9GVHUxjgA==
+"@acala-network/types@~4.1.5":
+  version "4.1.5"
+  resolved "https://registry.yarnpkg.com/@acala-network/types/-/types-4.1.5.tgz#ae3ced6dcac911d7f36416881b95fcc4e1ebe6f5"
+  integrity sha512-MTT0d+AFCMrm/ngNDoPJDAS8XSayFgLRUH9wT5Nvks/6n3WCzgNyGGZsgQI0PWGer/fdvAryJmNCX2xbKq4ghA==
   dependencies:
-    "@acala-network/type-definitions" "4.1.2-19"
+    "@acala-network/type-definitions" "4.1.5"
     "@babel/runtime" "^7.10.2"
     "@open-web3/api-mobx" "^1.1.4"
     "@open-web3/orml-types" "^1.1.4"
@@ -352,7 +353,7 @@
     aes-js "3.0.0"
     scrypt-js "3.0.1"
 
-"@ethersproject/keccak256@5.5.0", "@ethersproject/keccak256@>=5.0.0-beta.127", "@ethersproject/keccak256@^5.5.0":
+"@ethersproject/keccak256@5.5.0", "@ethersproject/keccak256@>=5.0.0-beta.127", "@ethersproject/keccak256@^5.5.0", "@ethersproject/keccak256@~5.5.0":
   version "5.5.0"
   resolved "https://registry.yarnpkg.com/@ethersproject/keccak256/-/keccak256-5.5.0.tgz#e4b1f9d7701da87c564ffe336f86dcee82983492"
   integrity sha512-5VoFCTjo2rYbBe1l2f4mccaRFN/4VQEYFwwn04aJV2h7qf4ZvI2wFxUE1XOX+snbwCLRzIeikOqtAoPwMza9kg==
@@ -574,7 +575,7 @@
   resolved "https://registry.yarnpkg.com/@openzeppelin/contracts/-/contracts-4.7.3.tgz#939534757a81f8d69cc854c7692805684ff3111e"
   integrity sha512-dGRS0agJzu8ybo44pCIf3xBaPQN/65AIXNgK8+4gzKd5kbvlqyxryUYVLJv7fK98Seyd2hDZzVEHSWAh0Bt1Yw==
 
-"@polkadot/api-augment@8.1.1", "@polkadot/api-augment@~8.1.1":
+"@polkadot/api-augment@8.1.1":
   version "8.1.1"
   resolved "https://registry.yarnpkg.com/@polkadot/api-augment/-/api-augment-8.1.1.tgz#5e49193b322456add7114ebdcc739ab3583f5ffb"
   integrity sha512-Entu5JP94mxLlaWduASECr+etw73CSBhpuaNY+/G4nXeZ34E6KkG1jURvGNvnNA8GXig42TXWT1Xrn3db6GoTg==
@@ -598,7 +599,7 @@
     "@polkadot/util" "^9.0.1"
     rxjs "^7.5.5"
 
-"@polkadot/api-derive@8.1.1", "@polkadot/api-derive@~8.1.1":
+"@polkadot/api-derive@8.1.1":
   version "8.1.1"
   resolved "https://registry.yarnpkg.com/@polkadot/api-derive/-/api-derive-8.1.1.tgz#4e945738bf9374943aa86bb643e3ae0ec020e8ba"
   integrity sha512-pwGls3OtPGbbR0uszBzWH3zqvsLlbB4bgvTYOYWzITY/WpwI0EkhINIRW1osf7foyRD6AzeX8FKumfkv3d8ItQ==
@@ -614,7 +615,7 @@
     "@polkadot/util-crypto" "^9.0.1"
     rxjs "^7.5.5"
 
-"@polkadot/api@8.1.1", "@polkadot/api@~8.1.1":
+"@polkadot/api@8.1.1":
   version "8.1.1"
   resolved "https://registry.yarnpkg.com/@polkadot/api/-/api-8.1.1.tgz#dab093beb1258848dcd164e73b50642264f5d040"
   integrity sha512-XAprWhVFdy23YDuGqMc6rTW6CemsbhngQ1e5wMcQKNWxHgCf1mF0Hhvbv/Z4+x6bLG70OELoX7Ssz1mk0tptVQ==
@@ -744,7 +745,7 @@
     "@babel/runtime" "^7.17.9"
     "@polkadot/util" "^9.0.1"
 
-"@polkadot/types@8.1.1", "@polkadot/types@~8.1.1":
+"@polkadot/types@8.1.1":
   version "8.1.1"
   resolved "https://registry.yarnpkg.com/@polkadot/types/-/types-8.1.1.tgz#43e5fb78e6214e6af7c5edbdb6ac69d5b919421d"
   integrity sha512-x9WDx9XcaSkQGlnk2MNu+49oK80s8Js7lr0mmCinV12m8+3si+GvIOvnuV3ydmWgWtpTt2ERfN+T8a/6f50EpA==
