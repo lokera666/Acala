@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,24 +21,28 @@
 #![allow(clippy::from_over_into)]
 #![allow(clippy::type_complexity)]
 
-use codec::FullCodec;
 use frame_support::pallet_prelude::{DispatchClass, Pays, Weight};
 use primitives::{task::TaskResult, Balance, CurrencyId, Multiplier, ReserveIdentifier};
 use sp_runtime::{
 	traits::CheckedDiv, transaction_validity::TransactionValidityError, DispatchError, DispatchResult, FixedU128,
 };
-use sp_std::{prelude::*, result::Result};
-use xcm::latest::prelude::*;
+use sp_std::{prelude::*, result::Result, vec};
+use xcm::prelude::*;
 
+pub mod bounded;
 pub mod dex;
+pub mod earning;
 pub mod evm;
 pub mod homa;
 pub mod honzon;
 pub mod incentives;
 pub mod mocks;
+pub mod relaychain;
 pub mod stable_asset;
 
+pub use crate::bounded::*;
 pub use crate::dex::*;
+pub use crate::earning::*;
 pub use crate::evm::*;
 pub use crate::homa::*;
 pub use crate::honzon::*;
@@ -49,6 +53,41 @@ pub type Price = FixedU128;
 pub type ExchangeRate = FixedU128;
 pub type Ratio = FixedU128;
 pub type Rate = FixedU128;
+
+/// Implement this StoredMap to replace https://github.com/paritytech/substrate/blob/569aae5341ea0c1d10426fa1ec13a36c0b64393b/frame/system/src/lib.rs#L1679
+/// NOTE: If use module-evm, need regards existed `frame_system::Account` also exists
+/// `pallet_balances::Account`, even if it's AccountData is default. (This kind of account is
+/// usually created by inc_provider), so that `repatriate_reserved` can transfer reserved balance to
+/// contract account, which is created by `inc_provider`.
+pub struct SystemAccountStore<T>(sp_std::marker::PhantomData<T>);
+impl<T: frame_system::Config> frame_support::traits::StoredMap<T::AccountId, T::AccountData> for SystemAccountStore<T> {
+	fn get(k: &T::AccountId) -> T::AccountData {
+		frame_system::Account::<T>::get(k).data
+	}
+
+	fn try_mutate_exists<R, E: From<DispatchError>>(
+		k: &T::AccountId,
+		f: impl FnOnce(&mut Option<T::AccountData>) -> Result<R, E>,
+	) -> Result<R, E> {
+		let account = frame_system::Account::<T>::get(k);
+		let is_default = account.data == T::AccountData::default();
+
+		// if System Account exists, act its Balances Account also exists.
+		let mut some_data = if is_default && !frame_system::Pallet::<T>::account_exists(k) {
+			None
+		} else {
+			Some(account.data)
+		};
+
+		let result = f(&mut some_data)?;
+		if frame_system::Pallet::<T>::providers(k) > 0 || frame_system::Pallet::<T>::sufficients(k) > 0 {
+			frame_system::Account::<T>::mutate(k, |a| a.data = some_data.unwrap_or_default());
+		} else {
+			frame_system::Account::<T>::remove(k)
+		}
+		Ok(result)
+	}
+}
 
 pub trait PriceProvider<CurrencyId> {
 	fn get_price(currency_id: CurrencyId) -> Option<Price>;
@@ -94,65 +133,15 @@ pub trait TransactionPayment<AccountId, Balance, NegativeImbalance> {
 	fn apply_multiplier_to_fee(fee: Balance, multiplier: Option<Multiplier>) -> Balance;
 }
 
-/// Used to interface with the Compound's Cash module
-pub trait CompoundCashTrait<Balance, Moment> {
-	fn set_future_yield(next_cash_yield: Balance, yield_index: u128, timestamp_effective: Moment) -> DispatchResult;
-}
-
-pub trait CallBuilder {
-	type AccountId: FullCodec;
-	type Balance: FullCodec;
-	type RelayChainCall: FullCodec;
-
-	/// Execute multiple calls in a batch.
-	/// Param:
-	/// - calls: List of calls to be executed
-	fn utility_batch_call(calls: Vec<Self::RelayChainCall>) -> Self::RelayChainCall;
-
-	/// Execute a call, replacing the `Origin` with a sub-account.
-	///  params:
-	/// - call: The call to be executed. Can be nested with `utility_batch_call`
-	/// - index: The index of sub-account to be used as the new origin.
-	fn utility_as_derivative_call(call: Self::RelayChainCall, index: u16) -> Self::RelayChainCall;
-
-	/// Bond extra on relay-chain.
-	///  params:
-	/// - amount: The amount of staking currency to bond.
-	fn staking_bond_extra(amount: Self::Balance) -> Self::RelayChainCall;
-
-	/// Unbond on relay-chain.
-	///  params:
-	/// - amount: The amount of staking currency to unbond.
-	fn staking_unbond(amount: Self::Balance) -> Self::RelayChainCall;
-
-	/// Withdraw unbonded staking on the relay-chain.
-	///  params:
-	/// - num_slashing_spans: The number of slashing spans to withdraw from.
-	fn staking_withdraw_unbonded(num_slashing_spans: u32) -> Self::RelayChainCall;
-
-	/// Transfer Staking currency to another account, disallowing "death".
-	///  params:
-	/// - to: The destination for the transfer
-	/// - amount: The amount of staking currency to be transferred.
-	fn balances_transfer_keep_alive(to: Self::AccountId, amount: Self::Balance) -> Self::RelayChainCall;
-
-	/// Wrap the final calls into the Xcm format.
-	///  params:
-	/// - call: The call to be executed
-	/// - extra_fee: Extra fee (in staking currency) used for buy the `weight` and `debt`.
-	/// - weight: the weight limit used for XCM.
-	/// - debt: the weight limit used to process the `call`.
-	fn finalize_call_into_xcm_message(call: Self::RelayChainCall, extra_fee: Self::Balance, weight: Weight) -> Xcm<()>;
-}
-
 /// Dispatchable tasks
 pub trait DispatchableTask {
 	fn dispatch(self, weight: Weight) -> TaskResult;
 }
 
 /// Idle scheduler trait
-pub trait IdleScheduler<Task> {
-	fn schedule(task: Task) -> DispatchResult;
+pub trait IdleScheduler<Index, Task> {
+	fn schedule(task: Task) -> Result<Index, DispatchError>;
+	fn dispatch(id: Index, weight: Weight) -> Weight;
 }
 
 #[cfg(feature = "std")]
@@ -163,8 +152,11 @@ impl DispatchableTask for () {
 }
 
 #[cfg(feature = "std")]
-impl<Task> IdleScheduler<Task> for () {
-	fn schedule(_task: Task) -> DispatchResult {
+impl<Index, Task> IdleScheduler<Index, Task> for () {
+	fn schedule(_task: Task) -> Result<Index, DispatchError> {
+		unimplemented!()
+	}
+	fn dispatch(_id: Index, _weight: Weight) -> Weight {
 		unimplemented!()
 	}
 }
@@ -176,6 +168,17 @@ pub trait OnNewEra<EraIndex> {
 
 pub trait NomineesProvider<AccountId> {
 	fn nominees() -> Vec<AccountId>;
+	fn nominees_in_groups(group_index_list: Vec<u16>) -> Vec<(u16, Vec<AccountId>)>;
+}
+
+impl<AccountId> NomineesProvider<AccountId> for () {
+	fn nominees() -> Vec<AccountId> {
+		vec![]
+	}
+
+	fn nominees_in_groups(_: Vec<u16>) -> Vec<(u16, Vec<AccountId>)> {
+		vec![]
+	}
 }
 
 pub trait LiquidateCollateral<AccountId> {
@@ -208,5 +211,5 @@ impl<AccountId> LiquidateCollateral<AccountId> for Tuple {
 }
 
 pub trait BuyWeightRate {
-	fn calculate_rate(location: MultiLocation) -> Option<Ratio>;
+	fn calculate_rate(location: Location) -> Option<Ratio>;
 }

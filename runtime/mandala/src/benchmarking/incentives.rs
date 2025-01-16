@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -22,15 +22,13 @@ use super::{
 	get_benchmarking_collateral_currency_ids,
 	utils::{dollar, set_balance, NATIVE, STABLECOIN, STAKING},
 };
-use frame_benchmarking::{account, whitelisted_caller, BenchmarkError};
-use frame_support::traits::OnInitialize;
+use frame_benchmarking::whitelisted_caller;
+use frame_support::{assert_ok, traits::OnInitialize};
 use frame_system::RawOrigin;
 use module_support::PoolId;
 use orml_benchmarking::runtime_benchmarks;
 use orml_traits::MultiCurrency;
 use sp_std::prelude::*;
-
-const SEED: u32 = 0;
 
 runtime_benchmarks! {
 	{ Runtime, module_incentives }
@@ -77,7 +75,7 @@ runtime_benchmarks! {
 		let caller: AccountId = whitelisted_caller();
 		let pool_id = PoolId::Loans(STAKING);
 
-		Rewards::add_share(&caller, &pool_id, 100);
+		assert_ok!(Rewards::add_share(&caller, &pool_id, dollar(NATIVE)));
 		Currencies::deposit(NATIVE, &Incentives::account_id(), 80 * dollar(NATIVE))?;
 		Rewards::accumulate_reward(&pool_id, NATIVE, 80 * dollar(NATIVE))?;
 	}: _(RawOrigin::Signed(caller), pool_id)
@@ -103,6 +101,9 @@ runtime_benchmarks! {
 			updates.push((PoolId::Loans(currency_id), Rate::default()));
 		}
 	}: _(RawOrigin::Root, updates)
+
+	update_claim_reward_deduction_currency {
+	}: _(RawOrigin::Root, PoolId::Earning(NATIVE), Some(NATIVE))
 }
 
 #[cfg(test)]

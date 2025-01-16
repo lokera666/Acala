@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -18,15 +18,11 @@
 
 use super::{
 	input::{Input, InputPricer, InputT, Output},
-	target_gas_limit,
 	weights::PrecompileWeights,
 };
-use crate::WeightToGas;
-use frame_support::log;
+use crate::{Weight, WeightToGas};
 use module_evm::{
-	precompiles::Precompile,
-	runner::state::{PrecompileFailure, PrecompileOutput, PrecompileResult},
-	Context, ExitError, ExitSucceed,
+	precompiles::Precompile, ExitSucceed, PrecompileFailure, PrecompileHandle, PrecompileOutput, PrecompileResult,
 };
 use module_support::{Erc20InfoMapping as Erc20InfoMappingT, PriceProvider as PriceProviderT};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -53,21 +49,13 @@ impl<Runtime> Precompile for OraclePrecompile<Runtime>
 where
 	Runtime: module_evm::Config + module_prices::Config,
 {
-	fn execute(input: &[u8], target_gas: Option<u64>, _context: &Context, _is_static: bool) -> PrecompileResult {
+	fn execute(handle: &mut impl PrecompileHandle) -> PrecompileResult {
+		let gas_cost = Pricer::<Runtime>::cost(handle)?;
+		handle.record_cost(gas_cost)?;
+
 		let input = Input::<Action, Runtime::AccountId, Runtime::AddressMapping, Runtime::Erc20InfoMapping>::new(
-			input,
-			target_gas_limit(target_gas),
+			handle.input(),
 		);
-
-		let gas_cost = Pricer::<Runtime>::cost(&input)?;
-
-		if let Some(gas_limit) = target_gas {
-			if gas_limit < gas_cost {
-				return Err(PrecompileFailure::Error {
-					exit_status: ExitError::OutOfGas,
-				});
-			}
-		}
 
 		let action = input.action()?;
 
@@ -88,7 +76,7 @@ where
 					}
 				};
 
-				let maybe_adjustment_multiplier = 10u128.checked_pow((18 - decimals).into());
+				let maybe_adjustment_multiplier = 10u128.checked_pow((18u8.saturating_sub(decimals)).into());
 				let adjustment_multiplier = match maybe_adjustment_multiplier {
 					Some(adjustment_multiplier) => adjustment_multiplier,
 					None => {
@@ -104,9 +92,7 @@ where
 				log::debug!(target: "evm", "oracle: getPrice currency_id: {:?}, price: {:?}, adjustment_multiplier: {:?}, output: {:?}", currency_id, price, adjustment_multiplier, output);
 				Ok(PrecompileOutput {
 					exit_status: ExitSucceed::Returned,
-					cost: gas_cost,
 					output: Output::encode_uint(output),
-					logs: Default::default(),
 				})
 			}
 		}
@@ -121,9 +107,11 @@ where
 {
 	const BASE_COST: u64 = 200;
 
-	fn cost(
-		input: &Input<Action, Runtime::AccountId, Runtime::AddressMapping, Runtime::Erc20InfoMapping>,
-	) -> Result<u64, PrecompileFailure> {
+	fn cost(handle: &mut impl PrecompileHandle) -> Result<u64, PrecompileFailure> {
+		let input = Input::<Action, Runtime::AccountId, Runtime::AddressMapping, Runtime::Erc20InfoMapping>::new(
+			handle.input(),
+		);
+
 		let action = input.action()?;
 
 		let cost = match action {
@@ -131,7 +119,7 @@ where
 				let currency_id = input.currency_id_at(1)?;
 				let read_currency = InputPricer::<Runtime>::read_currency(currency_id);
 				let get_price = WeightToGas::convert(PrecompileWeights::<Runtime>::oracle_get_price());
-				WeightToGas::convert(read_currency).saturating_add(get_price)
+				WeightToGas::convert(Weight::from_parts(read_currency, 0)).saturating_add(get_price)
 			}
 		};
 		Ok(Self::BASE_COST.saturating_add(cost))
@@ -142,10 +130,10 @@ where
 mod tests {
 	use super::*;
 
-	use crate::precompile::mock::{alice_evm_addr, new_test_ext, Oracle, Price, Test, ALICE, RENBTC};
+	use crate::precompile::mock::{alice_evm_addr, new_test_ext, Oracle, Price, Test, ALICE, DOT};
 	use frame_support::{assert_noop, assert_ok};
 	use hex_literal::hex;
-	use module_evm::ExitRevert;
+	use module_evm::{precompiles::tests::MockPrecompileHandle, Context, ExitRevert};
 	use orml_traits::DataFeeder;
 
 	type OraclePrecompile = crate::OraclePrecompile<Test>;
@@ -162,10 +150,10 @@ mod tests {
 			let price = Price::from(30_000);
 
 			// getPrice(address) -> 0x41976e09
-			// RENBTC
+			// DOT
 			let input = hex! {"
 				41976e09
-				000000000000000000000000 0000000000000000000100000000000000000014
+				000000000000000000000000 0000000000000000000100000000000000000002
 			"};
 
 			// no price yet
@@ -173,13 +161,14 @@ mod tests {
 				00000000000000000000000000000000 00000000000000000000000000000000
 			"};
 
-			let resp = OraclePrecompile::execute(&input, None, &context, false).unwrap();
+			let resp =
+				OraclePrecompile::execute(&mut MockPrecompileHandle::new(&input, None, &context, false)).unwrap();
 			assert_eq!(resp.exit_status, ExitSucceed::Returned);
 			assert_eq!(resp.output, expected_output.to_vec());
 
-			assert_ok!(Oracle::feed_value(ALICE, RENBTC, price));
+			assert_ok!(Oracle::feed_value(Some(ALICE), DOT, price));
 			assert_eq!(
-				Oracle::get(&RENBTC),
+				Oracle::get(&DOT),
 				Some(orml_oracle::TimestampedValue {
 					value: price,
 					timestamp: 1
@@ -191,7 +180,8 @@ mod tests {
 				00000000000000000000000000000000 000000000000065a4da25d3016c00000
 			"};
 
-			let resp = OraclePrecompile::execute(&input, None, &context, false).unwrap();
+			let resp =
+				OraclePrecompile::execute(&mut MockPrecompileHandle::new(&input, None, &context, false)).unwrap();
 			assert_eq!(resp.exit_status, ExitSucceed::Returned);
 			assert_eq!(resp.output, expected_output.to_vec());
 		});
@@ -201,7 +191,7 @@ mod tests {
 	fn oracle_precompile_should_handle_invalid_input() {
 		new_test_ext().execute_with(|| {
 			assert_noop!(
-				OraclePrecompile::execute(
+				OraclePrecompile::execute(&mut MockPrecompileHandle::new(
 					&[0u8; 0],
 					Some(1000),
 					&Context {
@@ -210,16 +200,15 @@ mod tests {
 						apparent_value: Default::default()
 					},
 					false
-				),
+				)),
 				PrecompileFailure::Revert {
 					exit_status: ExitRevert::Reverted,
 					output: "invalid input".into(),
-					cost: target_gas_limit(Some(1000)).unwrap(),
 				}
 			);
 
 			assert_noop!(
-				OraclePrecompile::execute(
+				OraclePrecompile::execute(&mut MockPrecompileHandle::new(
 					&[0u8; 3],
 					Some(1000),
 					&Context {
@@ -228,16 +217,15 @@ mod tests {
 						apparent_value: Default::default()
 					},
 					false
-				),
+				)),
 				PrecompileFailure::Revert {
 					exit_status: ExitRevert::Reverted,
 					output: "invalid input".into(),
-					cost: target_gas_limit(Some(1000)).unwrap(),
 				}
 			);
 
 			assert_noop!(
-				OraclePrecompile::execute(
+				OraclePrecompile::execute(&mut MockPrecompileHandle::new(
 					&[1u8; 32],
 					Some(1000),
 					&Context {
@@ -246,11 +234,10 @@ mod tests {
 						apparent_value: Default::default()
 					},
 					false
-				),
+				)),
 				PrecompileFailure::Revert {
 					exit_status: ExitRevert::Reverted,
 					output: "invalid action".into(),
-					cost: target_gas_limit(Some(1000)).unwrap(),
 				}
 			);
 		});

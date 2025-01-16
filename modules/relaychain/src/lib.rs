@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -22,127 +22,154 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(clippy::unused_unit)]
+#![allow(clippy::large_enum_variant)]
 
-use codec::{Decode, Encode, FullCodec};
-use sp_runtime::traits::StaticLookup;
+use parity_scale_codec::{Decode, Encode, FullCodec};
+use sp_runtime::{traits::StaticLookup, RuntimeDebug};
 
-use frame_support::{traits::Get, weights::Weight, RuntimeDebug};
-use module_support::CallBuilder;
-use primitives::Balance;
+use frame_support::traits::Get;
+use module_support::relaychain::*;
+use primitives::{AccountId, Balance};
 use sp_std::{boxed::Box, marker::PhantomData, prelude::*};
 
 pub use cumulus_primitives_core::ParaId;
-use xcm::latest::prelude::*;
+use xcm::v4::{prelude::*, Weight as XcmWeight};
 
-use frame_system::Config;
-
+/// The encoded index corresponds to Kusama's Runtime module configuration.
+/// https://github.com/paritytech/polkadot/blob/444e96ae34bcec8362f0f947a07bd912b32ca48f/runtime/kusama/src/lib.rs#L1379
 #[derive(Encode, Decode, RuntimeDebug)]
-pub enum BalancesCall<T: Config> {
-	#[codec(index = 3)]
-	TransferKeepAlive(<T::Lookup as StaticLookup>::Source, #[codec(compact)] Balance), /* TODO: because param type
-	                                                                                    * in relaychain is u64,
-	                                                                                    * need to confirm
-	                                                                                    * Balance(u128) is working. */
+pub enum KusamaRelayChainCall {
+	#[codec(index = 4)]
+	Balances(BalancesCall),
+	#[codec(index = 6)]
+	Staking(StakingCall),
+	#[codec(index = 24)]
+	Utility(Box<UtilityCall<Self>>),
+	#[codec(index = 30)]
+	Proxy(Box<ProxyCall<Self>>),
+	#[codec(index = 99)]
+	XcmPallet(XcmCall),
 }
 
-#[derive(Encode, Decode, RuntimeDebug)]
-pub enum UtilityCall<RelayChainCall> {
-	#[codec(index = 1)]
-	AsDerivative(u16, RelayChainCall),
-	#[codec(index = 2)]
-	BatchAll(Vec<RelayChainCall>),
-}
+impl RelayChainCall for KusamaRelayChainCall {
+	fn balances(call: BalancesCall) -> Self {
+		KusamaRelayChainCall::Balances(call)
+	}
 
-#[derive(Encode, Decode, RuntimeDebug)]
-pub enum StakingCall {
-	#[codec(index = 1)]
-	BondExtra(#[codec(compact)] Balance), /* TODO: because param type in relaychain is u64, need to confirm
-	                                       * Balance(u128) is working. */
-	#[codec(index = 2)]
-	Unbond(#[codec(compact)] Balance), /* TODO: because param type in relaychain is u64, need to confirm
-	                                    * Balance(u128) is working. */
-	#[codec(index = 3)]
-	WithdrawUnbonded(u32),
-}
+	fn staking(call: StakingCall) -> Self {
+		KusamaRelayChainCall::Staking(call)
+	}
 
-#[cfg(feature = "kusama")]
-mod kusama {
-	use crate::*;
+	fn utility(call: UtilityCall<Self>) -> Self {
+		KusamaRelayChainCall::Utility(Box::new(call))
+	}
 
-	/// The encoded index correspondes to Kusama's Runtime module configuration.
-	/// https://github.com/paritytech/polkadot/blob/444e96ae34bcec8362f0f947a07bd912b32ca48f/runtime/kusama/src/lib.rs#L1379
-	#[derive(Encode, Decode, RuntimeDebug)]
-	pub enum RelayChainCall<T: Config> {
-		#[codec(index = 4)]
-		Balances(BalancesCall<T>),
-		#[codec(index = 6)]
-		Staking(StakingCall),
-		#[codec(index = 24)]
-		Utility(Box<UtilityCall<Self>>),
+	fn proxy(call: ProxyCall<Self>) -> Self {
+		KusamaRelayChainCall::Proxy(Box::new(call))
+	}
+
+	fn xcm_pallet(call: XcmCall) -> Self {
+		KusamaRelayChainCall::XcmPallet(call)
 	}
 }
 
-#[cfg(feature = "polkadot")]
-mod polkadot {
-	use crate::*;
+/// The encoded index corresponds to Polkadot's Runtime module configuration.
+/// https://github.com/paritytech/polkadot/blob/84a3962e76151ac5ed3afa4ef1e0af829531ab42/runtime/polkadot/src/lib.rs#L1040
+#[derive(Encode, Decode, RuntimeDebug)]
+pub enum PolkadotRelayChainCall {
+	#[codec(index = 5)]
+	Balances(BalancesCall),
+	#[codec(index = 7)]
+	Staking(StakingCall),
+	#[codec(index = 26)]
+	Utility(Box<UtilityCall<Self>>),
+	#[codec(index = 29)]
+	Proxy(Box<ProxyCall<Self>>),
+	#[codec(index = 99)]
+	XcmPallet(XcmCall),
+}
 
-	/// The encoded index correspondes to Polkadot's Runtime module configuration.
-	/// https://github.com/paritytech/polkadot/blob/84a3962e76151ac5ed3afa4ef1e0af829531ab42/runtime/polkadot/src/lib.rs#L1040
-	#[derive(Encode, Decode, RuntimeDebug)]
-	pub enum RelayChainCall<T: Config> {
-		#[codec(index = 5)]
-		Balances(BalancesCall<T>),
-		#[codec(index = 7)]
-		Staking(StakingCall),
-		#[codec(index = 26)]
-		Utility(Box<UtilityCall<Self>>),
+impl RelayChainCall for PolkadotRelayChainCall {
+	fn balances(call: BalancesCall) -> Self {
+		PolkadotRelayChainCall::Balances(call)
+	}
+
+	fn staking(call: StakingCall) -> Self {
+		PolkadotRelayChainCall::Staking(call)
+	}
+
+	fn utility(call: UtilityCall<Self>) -> Self {
+		PolkadotRelayChainCall::Utility(Box::new(call))
+	}
+
+	fn proxy(call: ProxyCall<Self>) -> Self {
+		PolkadotRelayChainCall::Proxy(Box::new(call))
+	}
+
+	fn xcm_pallet(call: XcmCall) -> Self {
+		PolkadotRelayChainCall::XcmPallet(call)
 	}
 }
 
-#[cfg(feature = "kusama")]
-pub use kusama::*;
+pub struct RelayChainCallBuilder<ParachainId, RCC>(PhantomData<(ParachainId, RCC)>);
 
-#[cfg(feature = "polkadot")]
-pub use polkadot::*;
-
-pub struct RelayChainCallBuilder<T: Config, ParachainId: Get<ParaId>>(PhantomData<(T, ParachainId)>);
-
-impl<T: Config, ParachainId: Get<ParaId>> CallBuilder for RelayChainCallBuilder<T, ParachainId>
+impl<ParachainId, RCC> CallBuilder for RelayChainCallBuilder<ParachainId, RCC>
 where
-	T::AccountId: FullCodec,
-	RelayChainCall<T>: FullCodec,
+	ParachainId: Get<ParaId>,
+	RCC: RelayChainCall + FullCodec,
 {
-	type AccountId = T::AccountId;
+	type RelayChainAccountId = AccountId;
 	type Balance = Balance;
-	type RelayChainCall = RelayChainCall<T>;
+	type RelayChainCall = RCC;
 
-	fn utility_batch_call(calls: Vec<Self::RelayChainCall>) -> Self::RelayChainCall {
-		RelayChainCall::Utility(Box::new(UtilityCall::BatchAll(calls)))
+	fn utility_as_derivative_call(call: RCC, index: u16) -> RCC {
+		RCC::utility(UtilityCall::AsDerivative(index, call))
 	}
 
-	fn utility_as_derivative_call(call: Self::RelayChainCall, index: u16) -> Self::RelayChainCall {
-		RelayChainCall::Utility(Box::new(UtilityCall::AsDerivative(index, call)))
+	fn staking_bond_extra(amount: Self::Balance) -> RCC {
+		RCC::staking(StakingCall::BondExtra(amount))
 	}
 
-	fn staking_bond_extra(amount: Self::Balance) -> Self::RelayChainCall {
-		RelayChainCall::Staking(StakingCall::BondExtra(amount))
+	fn staking_unbond(amount: Self::Balance) -> RCC {
+		RCC::staking(StakingCall::Unbond(amount))
 	}
 
-	fn staking_unbond(amount: Self::Balance) -> Self::RelayChainCall {
-		RelayChainCall::Staking(StakingCall::Unbond(amount))
+	fn staking_withdraw_unbonded(num_slashing_spans: u32) -> RCC {
+		RCC::staking(StakingCall::WithdrawUnbonded(num_slashing_spans))
 	}
 
-	fn staking_withdraw_unbonded(num_slashing_spans: u32) -> Self::RelayChainCall {
-		RelayChainCall::Staking(StakingCall::WithdrawUnbonded(num_slashing_spans))
+	fn staking_nominate(targets: Vec<Self::RelayChainAccountId>) -> RCC {
+		RCC::staking(StakingCall::Nominate(
+			targets.iter().map(|a| RelayChainLookup::unlookup(a.clone())).collect(),
+		))
 	}
 
-	fn balances_transfer_keep_alive(to: Self::AccountId, amount: Self::Balance) -> Self::RelayChainCall {
-		RelayChainCall::Balances(BalancesCall::TransferKeepAlive(T::Lookup::unlookup(to), amount))
+	fn balances_transfer_keep_alive(to: Self::RelayChainAccountId, amount: Self::Balance) -> RCC {
+		RCC::balances(BalancesCall::TransferKeepAlive(RelayChainLookup::unlookup(to), amount))
 	}
 
-	fn finalize_call_into_xcm_message(call: Self::RelayChainCall, extra_fee: Self::Balance, weight: Weight) -> Xcm<()> {
-		let asset = MultiAsset {
-			id: Concrete(MultiLocation::here()),
+	fn xcm_pallet_reserve_transfer_assets(
+		dest: Location,
+		beneficiary: Location,
+		assets: Assets,
+		fee_assets_item: u32,
+	) -> RCC {
+		RCC::xcm_pallet(XcmCall::LimitedReserveTransferAssets(
+			dest.into_versioned(),
+			beneficiary.into_versioned(),
+			assets.into(),
+			fee_assets_item,
+			WeightLimit::Unlimited,
+		))
+	}
+
+	fn proxy_call(real: Self::RelayChainAccountId, call: RCC) -> RCC {
+		RCC::proxy(ProxyCall::Proxy(RelayChainLookup::unlookup(real), None, call))
+	}
+
+	fn finalize_call_into_xcm_message(call: RCC, extra_fee: Self::Balance, weight: XcmWeight) -> Xcm<()> {
+		let asset = Asset {
+			id: AssetId(Location::here()),
 			fun: Fungibility::Fungible(extra_fee),
 		};
 		Xcm(vec![
@@ -152,19 +179,56 @@ where
 				weight_limit: Unlimited,
 			},
 			Transact {
-				origin_type: OriginKind::SovereignAccount,
+				origin_kind: OriginKind::SovereignAccount,
 				require_weight_at_most: weight,
 				call: call.encode().into(),
 			},
 			RefundSurplus,
 			DepositAsset {
-				assets: All.into(),
-				max_assets: u32::max_value(),
-				beneficiary: MultiLocation {
+				assets: AllCounted(1).into(), // there is only 1 asset on relaychain
+				beneficiary: Location {
 					parents: 0,
-					interior: X1(Parachain(ParachainId::get().into())),
+					interior: Parachain(ParachainId::get().into()).into(),
 				},
 			},
 		])
+	}
+
+	fn finalize_multiple_calls_into_xcm_message(calls: Vec<(RCC, XcmWeight)>, extra_fee: Self::Balance) -> Xcm<()> {
+		let asset = Asset {
+			id: AssetId(Location::here()),
+			fun: Fungibility::Fungible(extra_fee),
+		};
+
+		let transacts = calls
+			.iter()
+			.map(|(call, weight)| Transact {
+				origin_kind: OriginKind::SovereignAccount,
+				require_weight_at_most: *weight,
+				call: call.encode().into(),
+			})
+			.collect();
+
+		Xcm([
+			vec![
+				WithdrawAsset(asset.clone().into()),
+				BuyExecution {
+					fees: asset,
+					weight_limit: Unlimited,
+				},
+			],
+			transacts,
+			vec![
+				RefundSurplus,
+				DepositAsset {
+					assets: AllCounted(1).into(), // there is only 1 asset on relaychain
+					beneficiary: Location {
+						parents: 0,
+						interior: Parachain(ParachainId::get().into()).into(),
+					},
+				},
+			],
+		]
+		.concat())
 	}
 }

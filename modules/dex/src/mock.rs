@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -22,16 +22,14 @@
 
 use super::*;
 use frame_support::{
-	construct_runtime, ord_parameter_types, parameter_types,
-	traits::{ConstU32, ConstU64, Everything, Nothing},
+	construct_runtime, derive_impl, ord_parameter_types, parameter_types,
+	traits::{ConstU32, ConstU64, Nothing},
 };
 use frame_system::EnsureSignedBy;
+use module_support::{mocks::MockErc20InfoMapping, SpecificJointsSwap};
 use orml_traits::{parameter_type_with_key, MultiReservableCurrency};
 use primitives::{Amount, TokenSymbol};
-use sp_core::H256;
-use sp_runtime::{testing::Header, traits::IdentityLookup};
-use sp_std::cell::RefCell;
-use support::{mocks::MockErc20InfoMapping, SpecificJointsSwap};
+use sp_runtime::{traits::IdentityLookup, BuildStorage};
 
 pub type BlockNumber = u64;
 pub type AccountId = u128;
@@ -39,68 +37,51 @@ pub type AccountId = u128;
 pub const ALICE: AccountId = 1;
 pub const BOB: AccountId = 2;
 pub const CAROL: AccountId = 3;
-pub const AUSD: CurrencyId = CurrencyId::Token(TokenSymbol::AUSD);
-pub const BTC: CurrencyId = CurrencyId::Token(TokenSymbol::RENBTC);
-pub const DOT: CurrencyId = CurrencyId::Token(TokenSymbol::DOT);
 pub const ACA: CurrencyId = CurrencyId::Token(TokenSymbol::ACA);
+pub const AUSD: CurrencyId = CurrencyId::Token(TokenSymbol::AUSD);
+pub const BTC: CurrencyId = CurrencyId::Token(TokenSymbol::TAP);
+pub const DOT: CurrencyId = CurrencyId::Token(TokenSymbol::DOT);
 
 parameter_types! {
 	pub static AUSDBTCPair: TradingPair = TradingPair::from_currency_ids(AUSD, BTC).unwrap();
 	pub static AUSDDOTPair: TradingPair = TradingPair::from_currency_ids(AUSD, DOT).unwrap();
 	pub static DOTBTCPair: TradingPair = TradingPair::from_currency_ids(DOT, BTC).unwrap();
+	pub static ACABTCPair: TradingPair = TradingPair::from_currency_ids(ACA, BTC).unwrap();
 }
 
 mod dex {
 	pub use super::super::*;
 }
 
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
 impl frame_system::Config for Runtime {
-	type Origin = Origin;
-	type Index = u64;
-	type BlockNumber = BlockNumber;
-	type Call = Call;
-	type Hash = H256;
-	type Hashing = ::sp_runtime::traits::BlakeTwo256;
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
-	type Header = Header;
-	type Event = Event;
-	type BlockHashCount = ConstU64<250>;
-	type BlockWeights = ();
-	type BlockLength = ();
-	type Version = ();
-	type PalletInfo = PalletInfo;
+	type Block = Block;
 	type AccountData = pallet_balances::AccountData<Balance>;
-	type OnNewAccount = ();
-	type OnKilledAccount = ();
-	type DbWeight = ();
-	type BaseCallFilter = Everything;
-	type SystemWeightInfo = ();
-	type SS58Prefix = ();
-	type OnSetCode = ();
-	type MaxConsumers = ConstU32<16>;
 }
 
 parameter_type_with_key! {
-	pub ExistentialDeposits: |_currency_id: CurrencyId| -> Balance {
-		Default::default()
+	pub ExistentialDeposits: |currency_id: CurrencyId| -> Balance {
+		match *currency_id {
+			ACA => 1,
+			_ => Default::default(),
+		}
 	};
 }
 
 impl orml_tokens::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Balance = Balance;
 	type Amount = Amount;
 	type CurrencyId = CurrencyId;
 	type WeightInfo = ();
 	type ExistentialDeposits = ExistentialDeposits;
-	type OnDust = ();
+	type CurrencyHooks = ();
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
 	type DustRemovalWhitelist = Nothing;
-	type OnNewTokenAccount = ();
-	type OnKilledTokenAccount = ();
 }
 
 pub struct MockDEXIncentives;
@@ -122,13 +103,14 @@ ord_parameter_types! {
 parameter_types! {
 	pub const GetExchangeFee: (u32, u32) = (1, 100);
 	pub const DEXPalletId: PalletId = PalletId(*b"aca/dexm");
+	pub const GetNativeCurrencyId: CurrencyId = ACA;
 	pub AlternativeSwapPathJointList: Vec<Vec<CurrencyId>> = vec![
 		vec![DOT],
 	];
 }
 
-thread_local! {
-	pub static AUSD_DOT_POOL_RECORD: RefCell<(Balance, Balance)> = RefCell::new((0, 0));
+parameter_types! {
+	pub static AusdDotPoolRecord: (Balance, Balance) = (0, 0);
 }
 
 pub struct MockOnLiquidityPoolUpdated;
@@ -136,17 +118,18 @@ impl Happened<(TradingPair, Balance, Balance)> for MockOnLiquidityPoolUpdated {
 	fn happened(info: &(TradingPair, Balance, Balance)) {
 		let (trading_pair, new_pool_0, new_pool_1) = info;
 		if *trading_pair == AUSDDOTPair::get() {
-			AUSD_DOT_POOL_RECORD.with(|v| *v.borrow_mut() = (*new_pool_0, *new_pool_1));
+			AusdDotPoolRecord::mutate(|v| *v = (*new_pool_0, *new_pool_1));
 		}
 	}
 }
 
 impl Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Tokens;
 	type GetExchangeFee = GetExchangeFee;
 	type TradingPathLimit = ConstU32<3>;
 	type PalletId = DEXPalletId;
+	type GetNativeCurrencyId = GetNativeCurrencyId;
 	type Erc20InfoMapping = MockErc20InfoMapping;
 	type WeightInfo = ();
 	type DEXIncentives = MockDEXIncentives;
@@ -163,18 +146,13 @@ parameter_types! {
 pub type AUSDJointSwap = SpecificJointsSwap<DexModule, AUSDJoint>;
 pub type ACAJointSwap = SpecificJointsSwap<DexModule, ACAJoint>;
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
 type Block = frame_system::mocking::MockBlock<Runtime>;
 
 construct_runtime!(
-	pub enum Runtime where
-		Block = Block,
-		NodeBlock = Block,
-		UncheckedExtrinsic = UncheckedExtrinsic,
-	{
-		System: frame_system::{Pallet, Call, Storage, Config, Event<T>},
-		DexModule: dex::{Pallet, Storage, Call, Event<T>, Config<T>},
-		Tokens: orml_tokens::{Pallet, Storage, Event<T>, Config<T>},
+	pub enum Runtime {
+		System: frame_system,
+		DexModule: dex,
+		Tokens: orml_tokens,
 	}
 );
 
@@ -207,7 +185,12 @@ impl Default for ExtBuilder {
 
 impl ExtBuilder {
 	pub fn initialize_enabled_trading_pairs(mut self) -> Self {
-		self.initial_enabled_trading_pairs = vec![AUSDDOTPair::get(), AUSDBTCPair::get(), DOTBTCPair::get()];
+		self.initial_enabled_trading_pairs = vec![
+			AUSDDOTPair::get(),
+			AUSDBTCPair::get(),
+			DOTBTCPair::get(),
+			ACABTCPair::get(),
+		];
 		self
 	}
 
@@ -218,14 +201,15 @@ impl ExtBuilder {
 				(AUSDDOTPair::get(), (1_000_000u128, 2_000_000u128)),
 				(AUSDBTCPair::get(), (1_000_000u128, 2_000_000u128)),
 				(DOTBTCPair::get(), (1_000_000u128, 2_000_000u128)),
+				(ACABTCPair::get(), (1_000_000u128, 2_000_000u128)),
 			],
 		)];
 		self
 	}
 
 	pub fn build(self) -> sp_io::TestExternalities {
-		let mut t = frame_system::GenesisConfig::default()
-			.build_storage::<Runtime>()
+		let mut t = frame_system::GenesisConfig::<Runtime>::default()
+			.build_storage()
 			.unwrap();
 
 		orml_tokens::GenesisConfig::<Runtime> {

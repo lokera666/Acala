@@ -1,7 +1,6 @@
-import { expect } from "chai";
-
+import { expect, beforeAll, it } from "vitest";
 import { describeWithAcala, getEvmNonce, transfer } from "./util";
-import { Signer } from "@acala-network/bodhi";
+import { BodhiSigner } from "@acala-network/bodhi";
 import { Wallet } from "@ethersproject/wallet";
 import { encodeAddress } from "@polkadot/keyring";
 import { hexToU8a, u8aConcat, stringToU8a } from "@polkadot/util";
@@ -9,15 +8,14 @@ import { ethers, BigNumber, ContractFactory } from "ethers";
 import Erc20DemoContract from "../build/Erc20DemoContract.json"
 
 describeWithAcala("Acala RPC (Sign eip712)", (context) => {
-	let alice: Signer;
+	let alice: BodhiSigner;
 	let signer: Wallet;
 	let subAddr: string;
 	let factory: ContractFactory;
 	let contract: string;
 
-	before("init", async function () {
-		this.timeout(15000);
-		[alice] = await context.provider.getWallets();
+	beforeAll(async function () {
+		[alice] = context.wallets;
 
 		signer = new Wallet(
 			"0x0123456789012345678901234567890123456789012345678901234567890123"
@@ -33,14 +31,12 @@ describeWithAcala("Acala RPC (Sign eip712)", (context) => {
 
 		expect(subAddr).to.equal("5EMjsczQH4R2WZaB5Svau8HWZp1aAfMqjxfv3GeLWotYSkLc");
 
-		await transfer(context, await alice.getSubstrateAddress(), subAddr, 10000000000000);
+		await transfer(context, alice.substrateAddress, subAddr, 10000000000000);
 
 		factory = new ethers.ContractFactory(Erc20DemoContract.abi, Erc20DemoContract.bytecode);
 	});
 
 	it("create should sign and verify", async function () {
-		this.timeout(150000);
-
 		const domain = {
 			name: "Acala EVM",
 			version: "1",
@@ -97,7 +93,7 @@ describeWithAcala("Acala RPC (Sign eip712)", (context) => {
 
 		const tx = context.provider.api.tx.evm.ethCall(
 			{ Create: null },
-			value.data,
+			value.data as any,
 			value.value,
 			value.gasLimit,
 			value.storageLimit,
@@ -145,7 +141,7 @@ describeWithAcala("Acala RPC (Sign eip712)", (context) => {
 						"gas_limit": 2100000,
 						"storage_limit": 20000,
 						"access_list": [],
-						"valid_until": 105
+						"valid_until": 106
 					}
 				}
 			  }`.toString().replace(/\s/g, '')
@@ -173,8 +169,6 @@ describeWithAcala("Acala RPC (Sign eip712)", (context) => {
 	});
 
 	it("call should sign and verify", async function () {
-		this.timeout(150000);
-
 		const domain = {
 			name: "Acala EVM",
 			version: "1",
@@ -222,7 +216,7 @@ describeWithAcala("Acala RPC (Sign eip712)", (context) => {
 
 		const tx = context.provider.api.tx.evm.ethCall(
 			{ Call: value.to },
-			value.data,
+			value.data as any,
 			value.value,
 			value.gasLimit,
 			value.storageLimit,
@@ -270,7 +264,7 @@ describeWithAcala("Acala RPC (Sign eip712)", (context) => {
 						"gas_limit": 210000,
 						"storage_limit": 1000,
 						"access_list": [],
-						"valid_until": 106
+						"valid_until": 107
 					}
 				}
 			  }`.toString().replace(/\s/g, '')
@@ -285,7 +279,7 @@ describeWithAcala("Acala RPC (Sign eip712)", (context) => {
 		});
 
 		await new Promise(async (resolve) => {
-			context.provider.api.tx.sudo.sudo(context.provider.api.tx.evm.publishFree(contract)).signAndSend(await alice.getSubstrateAddress(), ((result) => {
+			context.provider.api.tx.sudo.sudo(context.provider.api.tx.evm.publishFree(contract)).signAndSend(alice.substrateAddress, ((result) => {
 				if (result.status.isFinalized || result.status.isInBlock) {
 					resolve(undefined);
 				}

@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -18,8 +18,8 @@
 
 use super::utils::{dollar, inject_liquidity, set_balance, LIQUID, NATIVE, STABLECOIN, STAKING};
 use crate::{
-	AccountId, AssetRegistry, Balance, Currencies, CurrencyId, Dex, Event, NativeTokenExistentialDeposit, Origin,
-	Runtime, StableAsset, System, TransactionPayment, TreasuryPalletId,
+	AccountId, AssetRegistry, Balance, Currencies, CurrencyId, Dex, NativeTokenExistentialDeposit, Runtime,
+	RuntimeEvent, RuntimeOrigin, StableAsset, System, TransactionPayment, TreasuryPalletId,
 };
 use frame_benchmarking::{account, whitelisted_caller};
 use frame_support::{assert_ok, traits::OnFinalize};
@@ -33,7 +33,7 @@ use sp_std::prelude::*;
 
 const SEED: u32 = 0;
 
-fn assert_has_event(generic_event: Event) {
+fn assert_has_event(generic_event: RuntimeEvent) {
 	System::assert_has_event(generic_event.into());
 }
 
@@ -81,7 +81,7 @@ fn enable_stable_asset() {
 	// create stable asset pool
 	let pool_asset = CurrencyId::StableAssetPoolToken(0);
 	assert_ok!(StableAsset::create_pool(
-		Origin::root(),
+		RuntimeOrigin::root(),
 		pool_asset,
 		vec![STAKING, LIQUID],
 		vec![1u128, 1u128],
@@ -104,7 +104,7 @@ fn enable_stable_asset() {
 		Box::new(asset_metadata.clone())
 	));
 	assert_ok!(StableAsset::mint(
-		Origin::signed(funder.clone()),
+		RuntimeOrigin::signed(funder.clone()),
 		0,
 		vec![100 * dollar(STAKING), 100 * dollar(LIQUID)],
 		0u128
@@ -126,7 +126,7 @@ runtime_benchmarks! {
 
 	set_alternative_fee_swap_path {
 		let caller: AccountId = whitelisted_caller();
-		set_balance(NATIVE, &caller, NativeTokenExistentialDeposit::get());
+		set_balance(NATIVE, &caller, 2 * NativeTokenExistentialDeposit::get());
 	}: _(RawOrigin::Signed(caller.clone()), Some(vec![STABLECOIN, NATIVE]))
 	verify {
 		assert_eq!(TransactionPayment::alternative_fee_swap_path(&caller).unwrap().into_inner(), vec![STABLECOIN, NATIVE]);
@@ -223,13 +223,6 @@ runtime_benchmarks! {
 			AggregatedSwapPath::<CurrencyId>::Dex(vec![LIQUID, NATIVE]),
 		];
 	}: _(RawOrigin::Signed(caller.clone()), fee_aggregated_path, call)
-
-	with_fee_paid_by {
-		let caller: AccountId = whitelisted_caller();
-		let payer: AccountId = account("payer", 0, SEED);
-		let call = Box::new(frame_system::Call::remark { remark: vec![] }.into());
-		let signature = sp_runtime::MultiSignature::Sr25519(sp_core::sr25519::Signature([0u8; 64]));
-	}: _(RawOrigin::Signed(caller.clone()), call, payer, signature)
 
 	on_finalize {
 	}: {

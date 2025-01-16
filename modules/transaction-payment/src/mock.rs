@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -23,25 +23,23 @@
 use super::*;
 pub use crate as transaction_payment;
 use frame_support::{
-	construct_runtime, ord_parameter_types, parameter_types,
-	traits::{ConstU128, ConstU32, ConstU64, Everything, Nothing},
-	weights::{WeightToFeeCoefficients, WeightToFeePolynomial},
+	construct_runtime, derive_impl, ord_parameter_types, parameter_types,
+	traits::{ConstU128, ConstU32, ConstU64, Nothing},
+	weights::{WeightToFee as WeightToFeeT, WeightToFeeCoefficients, WeightToFeePolynomial},
 	PalletId,
 };
 use frame_system::EnsureSignedBy;
+use module_support::{
+	mocks::{MockAddressMapping, MockStableAsset},
+	Price, SpecificJointsSwap,
+};
 use orml_traits::parameter_type_with_key;
 use primitives::{Amount, ReserveIdentifier, TokenSymbol, TradingPair};
 use smallvec::smallvec;
-use sp_core::{crypto::AccountId32, H160, H256};
+use sp_core::{crypto::AccountId32, H160};
 use sp_runtime::{
-	testing::Header,
 	traits::{AccountIdConversion, IdentityLookup, One},
-	Perbill,
-};
-use sp_std::cell::RefCell;
-use support::{
-	mocks::{MockAddressMapping, MockStableAsset},
-	Price, SpecificJointsSwap,
+	BuildStorage, Perbill,
 };
 
 pub type AccountId = AccountId32;
@@ -57,49 +55,31 @@ pub const DOT: CurrencyId = CurrencyId::Token(TokenSymbol::DOT);
 pub const LDOT: CurrencyId = CurrencyId::Token(TokenSymbol::LDOT);
 
 parameter_types! {
-	pub static ExtrinsicBaseWeight: u64 = 0;
+	static ExtrinsicBaseWeight: Weight = Weight::zero();
 }
 
 pub struct BlockWeights;
 impl Get<frame_system::limits::BlockWeights> for BlockWeights {
 	fn get() -> frame_system::limits::BlockWeights {
 		frame_system::limits::BlockWeights::builder()
-			.base_block(0)
+			.base_block(Weight::zero())
 			.for_class(DispatchClass::all(), |weights| {
-				weights.base_extrinsic = EXTRINSIC_BASE_WEIGHT.with(|v| *v.borrow());
+				weights.base_extrinsic = ExtrinsicBaseWeight::get().into();
 			})
 			.for_class(DispatchClass::non_mandatory(), |weights| {
-				weights.max_total = 1024.into();
+				weights.max_total = Weight::from_parts(1024, 0).set_proof_size(u64::MAX).into();
 			})
 			.build_or_panic()
 	}
 }
 
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
 impl frame_system::Config for Runtime {
-	type Origin = Origin;
-	type Index = u64;
-	type BlockNumber = BlockNumber;
-	type Call = Call;
-	type Hash = H256;
-	type Hashing = ::sp_runtime::traits::BlakeTwo256;
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
-	type Header = Header;
-	type Event = Event;
-	type BlockHashCount = ConstU64<250>;
+	type Block = Block;
 	type BlockWeights = BlockWeights;
-	type BlockLength = ();
-	type Version = ();
-	type PalletInfo = PalletInfo;
 	type AccountData = pallet_balances::AccountData<Balance>;
-	type OnNewAccount = ();
-	type OnKilledAccount = ();
-	type DbWeight = ();
-	type BaseCallFilter = Everything;
-	type SystemWeightInfo = ();
-	type SS58Prefix = ();
-	type OnSetCode = ();
-	type MaxConsumers = ConstU32<16>;
 }
 
 parameter_type_with_key! {
@@ -113,31 +93,33 @@ parameter_type_with_key! {
 }
 
 impl orml_tokens::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Balance = Balance;
 	type Amount = Amount;
 	type CurrencyId = CurrencyId;
 	type WeightInfo = ();
 	type ExistentialDeposits = ExistentialDeposits;
-	type OnDust = ();
+	type CurrencyHooks = ();
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
 	type DustRemovalWhitelist = Nothing;
-	type OnNewTokenAccount = ();
-	type OnKilledTokenAccount = ();
 }
 
 impl pallet_balances::Config for Runtime {
 	type Balance = Balance;
 	type DustRemoval = ();
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ConstU128<10>;
 	type AccountStore = System;
 	type MaxLocks = ();
 	type MaxReserves = ConstU32<50>;
 	type ReserveIdentifier = ReserveIdentifier;
 	type WeightInfo = ();
+	type RuntimeHoldReason = RuntimeHoldReason;
+	type RuntimeFreezeReason = RuntimeFreezeReason;
+	type FreezeIdentifier = ();
+	type MaxFreezes = ();
 }
 
 pub type AdaptedBasicCurrency = module_currencies::BasicCurrencyAdapter<Runtime, PalletBalances, Amount, BlockNumber>;
@@ -148,7 +130,7 @@ parameter_types! {
 }
 
 impl module_currencies::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type MultiCurrency = Tokens;
 	type NativeCurrency = AdaptedBasicCurrency;
 	type GetNativeCurrencyId = GetNativeCurrencyId;
@@ -159,10 +141,6 @@ impl module_currencies::Config for Runtime {
 	type GasToWeight = ();
 	type SweepOrigin = EnsureSignedBy<Zero, AccountId>;
 	type OnDust = ();
-}
-
-thread_local! {
-	static IS_SHUTDOWN: RefCell<bool> = RefCell::new(false);
 }
 
 ord_parameter_types! {
@@ -181,11 +159,12 @@ parameter_types! {
 }
 
 impl module_dex::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Currencies;
 	type GetExchangeFee = GetExchangeFee;
 	type TradingPathLimit = TradingPathLimit;
 	type PalletId = DEXPalletId;
+	type GetNativeCurrencyId = GetNativeCurrencyId;
 	type Erc20InfoMapping = ();
 	type DEXIncentives = ();
 	type WeightInfo = ();
@@ -212,36 +191,36 @@ parameter_types! {
 	pub DotFeeSwapPath: Vec<CurrencyId> = vec![DOT, AUSD, ACA];
 }
 
-thread_local! {
-	pub static TIP_UNBALANCED_AMOUNT: RefCell<u128> = RefCell::new(0);
-	pub static FEE_UNBALANCED_AMOUNT: RefCell<u128> = RefCell::new(0);
+parameter_types! {
+	pub static TipUnbalancedAmount: u128 = 0;
+	pub static FeeUnbalancedAmount: u128 = 0;
 }
 
 pub struct DealWithFees;
 impl OnUnbalanced<pallet_balances::NegativeImbalance<Runtime>> for DealWithFees {
 	fn on_unbalanceds<B>(mut fees_then_tips: impl Iterator<Item = pallet_balances::NegativeImbalance<Runtime>>) {
 		if let Some(fees) = fees_then_tips.next() {
-			FEE_UNBALANCED_AMOUNT.with(|a| *a.borrow_mut() += fees.peek());
+			FeeUnbalancedAmount::mutate(|a| *a += fees.peek());
 			if let Some(tips) = fees_then_tips.next() {
-				TIP_UNBALANCED_AMOUNT.with(|a| *a.borrow_mut() += tips.peek());
+				TipUnbalancedAmount::mutate(|a| *a += tips.peek());
 			}
 		}
 	}
 }
 
-thread_local! {
-	static RELATIVE_PRICE: RefCell<Option<Price>> = RefCell::new(Some(Price::one()));
+parameter_types! {
+	static RelativePrice: Option<Price> = Some(Price::one());
 }
 
 pub struct MockPriceSource;
 impl MockPriceSource {
 	pub fn set_relative_price(price: Option<Price>) {
-		RELATIVE_PRICE.with(|v| *v.borrow_mut() = price);
+		RelativePrice::mutate(|v| *v = price);
 	}
 }
 impl PriceProvider<CurrencyId> for MockPriceSource {
 	fn get_relative_price(_base: CurrencyId, _quote: CurrencyId) -> Option<Price> {
-		RELATIVE_PRICE.with(|v| *v.borrow_mut())
+		RelativePrice::get()
 	}
 
 	fn get_price(_currency_id: CurrencyId) -> Option<Price> {
@@ -268,9 +247,17 @@ ord_parameter_types! {
 	pub const AlternativeFeeSurplus: Percent = Percent::from_percent(25);
 }
 
+impl WeightToFeeT for TransactionByteFee {
+	type Balance = Balance;
+
+	fn weight_to_fee(weight: &Weight) -> Self::Balance {
+		Self::Balance::saturated_from(weight.ref_time()).saturating_mul(TransactionByteFee::get())
+	}
+}
+
 impl Config for Runtime {
-	type Event = Event;
-	type Call = Call;
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
 	type NativeCurrencyId = GetNativeCurrencyId;
 	type AlternativeFeeSwapDeposit = ConstU128<1000>;
 	type Currency = PalletBalances;
@@ -280,7 +267,7 @@ impl Config for Runtime {
 	type TipPerWeightStep = TipPerWeightStep;
 	type MaxTipsOfPriority = ConstU128<1000>;
 	type WeightToFee = WeightToFee;
-	type TransactionByteFee = TransactionByteFee;
+	type LengthToFee = TransactionByteFee;
 	type FeeMultiplierUpdate = ();
 	type Swap = SpecificJointsSwap<DEXModule, AlternativeSwapPathJointList>;
 	type MaxSwapSlippageCompareToOracle = MaxSwapSlippageCompareToOracle;
@@ -295,8 +282,8 @@ impl Config for Runtime {
 	type DefaultFeeTokens = DefaultFeeTokens;
 }
 
-thread_local! {
-	static WEIGHT_TO_FEE: RefCell<u128> = RefCell::new(1);
+parameter_types! {
+	static WeightToFeeStep: u128 = 1;
 }
 
 pub struct WeightToFee;
@@ -307,33 +294,28 @@ impl WeightToFeePolynomial for WeightToFee {
 		smallvec![frame_support::weights::WeightToFeeCoefficient {
 			degree: 1,
 			coeff_frac: Perbill::zero(),
-			coeff_integer: WEIGHT_TO_FEE.with(|v| *v.borrow()),
+			coeff_integer: WeightToFeeStep::get(),
 			negative: false,
 		}]
 	}
 }
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
 type Block = frame_system::mocking::MockBlock<Runtime>;
 
 construct_runtime!(
-	pub enum Runtime where
-		Block = Block,
-		NodeBlock = Block,
-		UncheckedExtrinsic = UncheckedExtrinsic
-	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		TransactionPayment: transaction_payment::{Pallet, Call, Storage, Event<T>},
-		PalletBalances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-		Tokens: orml_tokens::{Pallet, Storage, Event<T>, Config<T>},
-		Currencies: module_currencies::{Pallet, Call, Event<T>},
-		DEXModule: module_dex::{Pallet, Storage, Call, Event<T>, Config<T>},
+	pub enum Runtime {
+		System: frame_system,
+		TransactionPayment: transaction_payment,
+		PalletBalances: pallet_balances,
+		Tokens: orml_tokens,
+		Currencies: module_currencies,
+		DEXModule: module_dex,
 	}
 );
 
 pub struct ExtBuilder {
 	balances: Vec<(AccountId, CurrencyId, Balance)>,
-	base_weight: u64,
+	base_weight: Weight,
 	byte_fee: u128,
 	weight_to_fee: u128,
 	tip_per_weight_step: u128,
@@ -344,7 +326,7 @@ impl Default for ExtBuilder {
 	fn default() -> Self {
 		Self {
 			balances: vec![(ALICE, AUSD, 10000), (ALICE, DOT, 1000), (ALICE, LDOT, 1000)],
-			base_weight: 0,
+			base_weight: Weight::zero(),
 			byte_fee: 2,
 			weight_to_fee: 1,
 			tip_per_weight_step: 1,
@@ -354,7 +336,7 @@ impl Default for ExtBuilder {
 }
 
 impl ExtBuilder {
-	pub fn base_weight(mut self, base_weight: u64) -> Self {
+	pub fn base_weight(mut self, base_weight: Weight) -> Self {
 		self.base_weight = base_weight;
 		self
 	}
@@ -375,15 +357,15 @@ impl ExtBuilder {
 		self
 	}
 	fn set_constants(&self) {
-		EXTRINSIC_BASE_WEIGHT.with(|v| *v.borrow_mut() = self.base_weight);
-		TRANSACTION_BYTE_FEE.with(|v| *v.borrow_mut() = self.byte_fee);
-		WEIGHT_TO_FEE.with(|v| *v.borrow_mut() = self.weight_to_fee);
-		TIP_PER_WEIGHT_STEP.with(|v| *v.borrow_mut() = self.tip_per_weight_step);
+		ExtrinsicBaseWeight::mutate(|v| *v = self.base_weight);
+		TransactionByteFee::mutate(|v| *v = self.byte_fee);
+		WeightToFeeStep::mutate(|v| *v = self.weight_to_fee);
+		TipPerWeightStep::mutate(|v| *v = self.tip_per_weight_step);
 	}
 	pub fn build(self) -> sp_io::TestExternalities {
 		self.set_constants();
-		let mut t = frame_system::GenesisConfig::default()
-			.build_storage::<Runtime>()
+		let mut t = frame_system::GenesisConfig::<Runtime>::default()
+			.build_storage()
 			.unwrap();
 
 		pallet_balances::GenesisConfig::<Runtime> {

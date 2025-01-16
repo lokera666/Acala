@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -20,14 +20,13 @@
 
 use crate::{evm::EvmAddress, *};
 use bstringify::bstringify;
-use codec::{Decode, Encode, MaxEncodedLen};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 pub use nutsfinance_stable_asset::StableAssetPoolId;
+use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 use sp_runtime::RuntimeDebug;
 use sp_std::prelude::*;
 
-#[cfg(feature = "std")]
 use serde::{Deserialize, Serialize};
 
 macro_rules! create_currency_id {
@@ -121,8 +120,7 @@ macro_rules! create_currency_id {
 			// Acala tokens
 			let mut acala_tokens = vec![];
 			$(
-				// ignore RENBTC and CASH
-				if $val < 128 && $val != 20 && $val != 21 {
+				if $val < 128 {
 					acala_tokens.push(Token {
 						symbol: stringify!($symbol).to_string(),
 						address: EvmAddress::try_from(CurrencyId::Token(TokenSymbol::$symbol)).unwrap(),
@@ -398,15 +396,13 @@ create_currency_id! {
 	//
 	// 0 - 127: Polkadot Ecosystem tokens
 	// 0 - 19: Acala & Polkadot native tokens
-	// 20 - 39: External tokens (e.g. bridged)
-	// 40 - 127: Polkadot parachain tokens
+	// 20 - 127: Reserved for future usage
 	//
 	// 128 - 255: Kusama Ecosystem tokens
 	// 128 - 147: Karura & Kusama native tokens
-	// 148 - 167: External tokens (e.g. bridged)
+	// 148 - 167: Reserved for future usage
 	// 168 - 255: Kusama parachain tokens
-	#[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, PartialOrd, Ord, TypeInfo, MaxEncodedLen)]
-	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
+	#[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, PartialOrd, Ord, TypeInfo, MaxEncodedLen, Serialize, Deserialize)]
 	#[repr(u8)]
 	pub enum TokenSymbol {
 		// 0 - 19: Acala & Polkadot native tokens
@@ -415,10 +411,7 @@ create_currency_id! {
 		DOT("Polkadot", 10) = 2,
 		LDOT("Liquid DOT", 10) = 3,
 		TAP("Tapio", 12) = 4,
-		// 20 - 39: External tokens (e.g. bridged)
-		RENBTC("Ren Protocol BTC", 8) = 20,
-		CASH("Compound CASH", 8) = 21,
-		// 40 - 127: Polkadot parachain tokens
+		// 20 - 127: Reserved for future usage
 
 		// 128 - 147: Karura & Kusama native tokens
 		KAR("Karura", 12) = 128,
@@ -426,9 +419,7 @@ create_currency_id! {
 		KSM("Kusama", 12) = 130,
 		LKSM("Liquid KSM", 12) = 131,
 		TAI("Taiga", 12) = 132,
-		// 148 - 167: External tokens (e.g. bridged)
-		// 149: Reserved for renBTC
-		// 150: Reserved for CASH
+		// 148 - 167: Reserved for future usage
 		// 168 - 255: Kusama parachain tokens
 		BNC("Bifrost Native Token", 12) = 168,
 		VSKSM("Bifrost Voucher Slot KSM", 12) = 169,
@@ -449,9 +440,22 @@ pub type ForeignAssetId = u16;
 pub type Erc20Id = u32;
 pub type Lease = BlockNumber;
 
-#[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, PartialOrd, Ord, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
+#[derive(
+	Encode,
+	Decode,
+	Eq,
+	PartialEq,
+	Copy,
+	Clone,
+	RuntimeDebug,
+	PartialOrd,
+	Ord,
+	TypeInfo,
+	MaxEncodedLen,
+	Serialize,
+	Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub enum DexShare {
 	Token(TokenSymbol),
 	Erc20(EvmAddress),
@@ -460,9 +464,22 @@ pub enum DexShare {
 	StableAssetPoolToken(StableAssetPoolId),
 }
 
-#[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug, PartialOrd, Ord, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "std", serde(rename_all = "camelCase"))]
+#[derive(
+	Encode,
+	Decode,
+	Eq,
+	PartialEq,
+	Copy,
+	Clone,
+	RuntimeDebug,
+	PartialOrd,
+	Ord,
+	TypeInfo,
+	MaxEncodedLen,
+	Serialize,
+	Deserialize,
+)]
+#[serde(rename_all = "camelCase")]
 pub enum CurrencyId {
 	Token(TokenSymbol),
 	DexShare(DexShare, DexShare),

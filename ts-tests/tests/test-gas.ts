@@ -1,16 +1,14 @@
-import { expect } from "chai";
-
+import { expect, beforeAll, it } from "vitest";
 import Block from "../build/Block.json"
 import { describeWithAcala } from "./util";
 import { deployContract } from "ethereum-waffle";
-import { BigNumber } from "ethers";
+import { BodhiSigner } from "@acala-network/bodhi";
 
 describeWithAcala("Acala RPC (Gas)", (context) => {
-	let alice: Signer;
+	let alice: BodhiSigner;
 
-	before("create the contract", async function () {
-		this.timeout(15000);
-		[alice] = await context.provider.getWallets();
+	beforeAll(async function () {
+		[alice] = context.wallets;
 	});
 
 	it("eth_estimateGas for contract creation", async function () {
@@ -18,7 +16,7 @@ describeWithAcala("Acala RPC (Gas)", (context) => {
 			from: alice.getAddress(),
 			data: "0x" + Block.bytecode,
 		});
-		expect(gas.toNumber()).to.be.eq(593373);
+		expect(gas.toNumber()).to.closeTo(12601114, 1000);
 	});
 
 	it("eth_estimateResources for contract creation", async function () {
@@ -27,26 +25,26 @@ describeWithAcala("Acala RPC (Gas)", (context) => {
 			data: "0x" + Block.bytecode,
 		});
 
-		expect(data.gas.toNumber()).to.be.eq(273373);
-		expect(data.storage.toNumber()).to.be.eq(10921);
-		expect(data.weightFee.toNumber()).to.be.eq(5793819306195);
+		expect(data.usedGas.toNumber()).toMatchInlineSnapshot(`263596`)
+		expect(data.gasLimit.toNumber()).closeTo(316315, 1000);
+		expect(data.safeStorage.toNumber()).toMatchInlineSnapshot(`12141`)
 	});
 
 	it("eth_estimateGas for contract call", async function () {
-		const contract = await deployContract(alice as any, Block);
+		const contract = await deployContract(alice, Block);
 		const gas = await contract.estimateGas.multiply(3);
-		expect(gas.toNumber()).to.be.eq(342409);
+		expect(gas.toNumber()).toMatchInlineSnapshot(`200107`)
 	});
 
 	it("eth_estimateResources for contract call", async function () {
-		const contract = await deployContract(alice as any, Block);
+		const contract = await deployContract(alice, Block);
 
 		const data = await context.provider.estimateResources(
 			await contract.populateTransaction.multiply(3)
 		);
 
-		expect(data.gas.toNumber()).to.be.eq(22409);
-		expect(data.storage.toNumber()).to.be.eq(0);
-		expect(data.weightFee.toNumber()).to.be.eq(5793791439374);
+		expect(data.usedGas.toNumber()).toMatchInlineSnapshot(`22111`)
+		expect(data.gasLimit.toNumber()).to.closeTo(26445, 1000);
+		expect(data.safeStorage.toNumber()).toMatchInlineSnapshot(`70`)
 	});
 });

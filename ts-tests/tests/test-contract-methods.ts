@@ -1,28 +1,53 @@
-import { expect } from "chai";
+import { expect, beforeAll, it } from "vitest";
 
 import Block from "../build/Block.json"
 import { describeWithAcala, nextBlock } from "./util";
 import { deployContract } from "ethereum-waffle";
-import { Signer } from "@acala-network/bodhi";
+import { BodhiSigner } from "@acala-network/bodhi";
 import { Contract } from "ethers";
 
 describeWithAcala("Acala RPC (Contract Methods)", (context) => {
-	let alice: Signer;
+	let alice: BodhiSigner;
 	let contract: Contract;
 
-	before("create the contract", async function () {
-		this.timeout(15000);
-		[alice] = await context.provider.getWallets();
-		contract = await deployContract(alice as any, Block);
+	beforeAll(async function () {
+		[alice] = context.wallets;
+		contract = await deployContract(alice, Block);
 	});
 
 	it("should return contract method result", async function () {
 		expect((await contract.multiply(3)).toString()).to.equal("21");
 	});
 
+	it("should get correct environmental baseFee", async function () {
+		expect((await contract.baseFee()).toString()).to.eq('1');
+	});
+
+	it("should get correct environmental chainId", async function () {
+		expect((await contract.chainId()).toString()).to.eq('595');
+	});
+
+	it("should get correct environmental coinbase", async function () {
+		expect((await contract.coinbase()).toString()).toMatchInlineSnapshot(`"0xF4cA11Ca834C9e2FB49f059aB71fB9C72dAd05f9"`);
+	});
+
+	// it doesn't work with mandala
+	// it("should get correct environmental prevrandao", async function () {
+	// 	expect((await contract.prevrandao()).toString()).to.eq('0x0000000000000000000000000000000000000000');
+	// });
+
+	it("should get correct environmental block gaslimit", async function () {
+		expect((await contract.gasLimit()).toString()).to.eq('0');
+	});
+
+	it("should get correct environmental block timestamp", async function () {
+		const now = await context.provider.api.query.timestamp.now()
+		expect((await contract.timestamp()).toString()).to.eq((Math.floor(now.toNumber() / 1000)).toString());
+	});
+
 	it("should get correct environmental block number", async function () {
 		// Solidity `block.number` is expected to return the same height at which the runtime call was made.
-		let height = await contract.currentBlock();
+		let height = await contract.blockNumber();
 		let current_block_number = await context.provider.api.query.system.number();
 
 		expect(await height.toString()).to.eq(current_block_number.toString());
@@ -30,7 +55,6 @@ describeWithAcala("Acala RPC (Contract Methods)", (context) => {
 	});
 
 	it("should get correct environmental block hash", async function () {
-		this.timeout(15000);
 		// Solidity `blockhash` is expected to return the ethereum block hash at a given height.
 		let number = await context.provider.getBlockNumber();
 
@@ -59,22 +83,6 @@ describeWithAcala("Acala RPC (Contract Methods)", (context) => {
 		//);
 	});
 
-	it("should get correct environmental chainId", async function () {
-		expect((await contract.chainId()).toString()).to.eq('595');
-	});
-
-	it("should get correct environmental coinbase", async function () {
-		expect((await contract.coinbase()).toString()).to.eq('0x0000000000000000000000000000000000000000');
-	});
-
-	it("should get correct environmental block timestamp", async function () {
-		expect((await contract.timestamp()).toString()).to.eq((parseInt(await context.provider.api.query.timestamp.now() / 1000)).toString());
-	});
-
-	it("should get correct environmental block gaslimit", async function () {
-		expect((await contract.gasLimit()).toString()).to.eq('0');
-	});
-
 	// Requires error handling
 	it("should fail for missing parameters", async function () {
 		const mock = new Contract(contract.address, [
@@ -84,7 +92,7 @@ describeWithAcala("Acala RPC (Contract Methods)", (context) => {
 			}
 		], alice);
 
-		await expect(mock.multiply()).to.be.rejectedWith('-32603: VM Exception while processing transaction: execution revert: 0x');
+		await expect(mock.multiply()).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: execution reverted: ]`);
 	});
 
 	// Requires error handling
@@ -99,7 +107,7 @@ describeWithAcala("Acala RPC (Contract Methods)", (context) => {
 			}
 		], alice);
 
-		await expect(mock.multiply(3, 4)).to.be.rejectedWith('-32603: VM Exception while processing transaction: execution revert: 0x');
+		await expect(mock.multiply(3, 4)).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: execution reverted: ]`);
 	});
 
 	// Requires error handling
@@ -113,6 +121,6 @@ describeWithAcala("Acala RPC (Contract Methods)", (context) => {
 			}
 		], alice);
 
-		await expect(mock.multiply("0x0123456789012345678901234567890123456789")).to.be.rejectedWith('-32603: VM Exception while processing transaction: execution revert: 0x');
+		await expect(mock.multiply("0x0123456789012345678901234567890123456789")).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: execution reverted: ]`);
 	});
 });

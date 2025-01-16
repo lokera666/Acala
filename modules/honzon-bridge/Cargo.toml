@@ -1,46 +1,47 @@
 [package]
 name = "module-honzon-bridge"
-version = "2.9.5"
+version = "2.28.0"
 authors = ["Acala Developers"]
 edition = "2021"
 
 [dependencies]
-serde = { version = "1.0.136", optional = true }
-scale-info = { version = "2.1", default-features = false, features = ["derive"] }
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
-sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
-frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
-frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
-primitives = { package = "acala-primitives", path = "../../primitives", default-features = false }
-orml-traits = { path = "../../orml/traits", default-features = false }
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+primitives = { workspace = true }
+orml-traits = { workspace = true }
 
 [dev-dependencies]
-serde_json = "1.0.68"
-hex = "0.4"
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
-pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
-pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+serde_json = { workspace = true, features = ["std"] }
+hex = { workspace = true, features = ["std"] }
+sp-core = { workspace = true, features = ["std"] }
+sp-io = { workspace = true, features = ["std"] }
+pallet-balances = { workspace = true, features = ["std"] }
+pallet-timestamp = { workspace = true, features = ["std"] }
 
-module-currencies = { path = "../../modules/currencies" }
-module-evm = { path = "../evm" }
-module-evm-accounts = { path = "../evm-accounts" }
-module-evm-bridge = { path = "../evm-bridge" }
-module-support = { path = "../../modules/support" }
-orml-tokens = { path = "../../orml/tokens" }
+module-currencies = { workspace = true, features = ["std"] }
+module-evm = { workspace = true, features = ["std"] }
+module-evm-accounts = { workspace = true, features = ["std"] }
+module-evm-bridge = { workspace = true, features = ["std"] }
+module-support = { workspace = true, features = ["std"] }
+orml-tokens = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
 std = [
-	"serde",
-	"codec/std",
+	"parity-scale-codec/std",
+	"frame-support/std",
+	"frame-system/std",
+	"orml-traits/std",
+	"primitives/std",
 	"scale-info/std",
 	"sp-runtime/std",
 	"sp-std/std",
-	"frame-support/std",
-	"frame-system/std",
-	"primitives/std",
-	"orml-traits/std",
 ]
-try-runtime = ["frame-support/try-runtime"]
+try-runtime = [
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+]

@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -24,11 +24,11 @@
 
 use frame_support::{pallet_prelude::*, transactional};
 use frame_system::pallet_prelude::*;
+use module_support::{AggregatedSwapPath, DEXManager, RebasedStableAssetError, Swap, SwapLimit};
 use nutsfinance_stable_asset::traits::StableAsset as StableAssetT;
 use primitives::{Balance, CurrencyId};
 use sp_runtime::traits::{Convert, Zero};
 use sp_std::{marker::PhantomData, vec::Vec};
-use support::{AggregatedSwapPath, DEXManager, RebasedStableAssetError, Swap, SwapLimit};
 
 mod mock;
 mod tests;
@@ -54,11 +54,11 @@ pub mod module {
 			AtLeast64BitUnsigned = Balance,
 			Balance = Balance,
 			AccountId = Self::AccountId,
-			BlockNumber = Self::BlockNumber,
+			BlockNumber = BlockNumberFor<Self>,
 		>;
 
 		/// Origin represented Governance
-		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::Origin>;
+		type GovernanceOrigin: EnsureOrigin<<Self as frame_system::Config>::RuntimeOrigin>;
 
 		/// The alternative swap path joint list for DEX swap
 		#[pallet::constant]
@@ -92,12 +92,11 @@ pub mod module {
 		StorageMap<_, Twox64Concat, (CurrencyId, CurrencyId), BoundedVec<SwapPath, T::SwapPathLimit>, OptionQuery>;
 
 	#[pallet::pallet]
-	#[pallet::generate_store(pub(super) trait Store)]
 	#[pallet::without_storage_info]
 	pub struct Pallet<T>(_);
 
 	#[pallet::hooks]
-	impl<T: Config> Hooks<T::BlockNumber> for Pallet<T> {}
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -106,13 +105,13 @@ pub mod module {
 		/// - `paths`: aggregated swap path.
 		/// - `supply_amount`: exact supply amount.
 		/// - `min_target_amount`: acceptable minimum target amount.
+		#[pallet::call_index(0)]
 		#[pallet::weight(<T as Config>::WeightInfo::swap_with_exact_supply(
 			paths.iter().fold(0, |u, swap_path| match swap_path {
 				SwapPath::Dex(v) => u + (v.len() as u32),
 				SwapPath::Taiga(_, _, _) => u + 1
 			})
 		))]
-		#[transactional]
 		pub fn swap_with_exact_supply(
 			origin: OriginFor<T>,
 			paths: Vec<SwapPath>,
@@ -126,13 +125,13 @@ pub mod module {
 			Ok(())
 		}
 
-		#[pallet::weight(<T as Config>::WeightInfo::swap_with_exact_supply(
+		#[pallet::call_index(1)]
+		#[pallet::weight(<T as Config>::WeightInfo::swap_with_exact_target(
 			paths.iter().fold(0, |u, swap_path| match swap_path {
 				SwapPath::Dex(v) => u + (v.len() as u32),
 				SwapPath::Taiga(_, _, _) => u + 1
 			})
 		))]
-		#[transactional]
 		pub fn swap_with_exact_target(
 			origin: OriginFor<T>,
 			paths: Vec<SwapPath>,
@@ -152,8 +151,8 @@ pub mod module {
 		///
 		/// Parameters:
 		/// - `updates`:  Vec<((TokenA, TokenB), Option<Vec<SwapPath>>)>
+		#[pallet::call_index(2)]
 		#[pallet::weight(<T as Config>::WeightInfo::update_aggregated_swap_paths(updates.len() as u32))]
-		#[transactional]
 		pub fn update_aggregated_swap_paths(
 			origin: OriginFor<T>,
 			updates: Vec<((CurrencyId, CurrencyId), Option<Vec<SwapPath>>)>,
@@ -283,10 +282,8 @@ impl<T: Config> Pallet<T> {
 					match path {
 						SwapPath::Dex(dex_path) => {
 							// calculate the supply amount
-							let (supply_amount, _) = T::DEX::get_swap_amount(
-								dex_path,
-								SwapLimit::ExactTarget(Balance::max_value(), input_amount),
-							)?;
+							let (supply_amount, _) =
+								T::DEX::get_swap_amount(dex_path, SwapLimit::ExactTarget(Balance::MAX, input_amount))?;
 
 							input_amount = supply_amount;
 						}

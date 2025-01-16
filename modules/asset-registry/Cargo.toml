@@ -1,42 +1,39 @@
 [package]
 name = "module-asset-registry"
-version = "2.9.5"
+version = "2.28.0"
 authors = ["Acala Developers"]
 edition = "2021"
 
 [dependencies]
-log = { version = "0.4.17", default-features = false }
-serde = { version = "1.0.136", optional = true }
-scale-info = { version = "2.1", default-features = false, features = ["derive"] }
-codec = { package = "parity-scale-codec", version = "3.0.0", default-features = false }
-sp-runtime = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
-sp-std = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false  }
-frame-support = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
-frame-system = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26", default-features = false }
-primitives = { package = "acala-primitives", path = "../../primitives", default-features = false }
+log = { workspace = true }
+scale-info = { workspace = true }
+parity-scale-codec = { workspace = true }
+sp-runtime = { workspace = true }
+sp-std = { workspace = true  }
+frame-support = { workspace = true }
+frame-system = { workspace = true }
+primitives = { workspace = true }
 
-xcm = { git = "https://github.com/paritytech/polkadot", branch = "release-v0.9.26", default-features = false }
+xcm = { workspace = true }
 
-module-support = { path = "../support", default-features = false }
+module-support = { workspace = true }
 
 [dev-dependencies]
-serde_json = "1.0.68"
-hex = "0.4"
-sp-core = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
-sp-io = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
-pallet-balances = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
-pallet-timestamp = { git = "https://github.com/paritytech/substrate", branch = "polkadot-v0.9.26" }
+serde_json = { workspace = true, features = ["std"] }
+hex = { workspace = true, features = ["std"] }
+sp-core = { workspace = true, features = ["std"] }
+sp-io = { workspace = true, features = ["std"] }
+pallet-balances = { workspace = true, features = ["std"] }
+pallet-timestamp = { workspace = true, features = ["std"] }
 
-module-evm = { path = "../evm" }
-module-evm-bridge = { path = "../evm-bridge" }
-orml-utilities = { path = "../../orml/utilities" }
+module-evm = { workspace = true, features = ["std"] }
+module-evm-bridge = { workspace = true, features = ["std"] }
 
 [features]
 default = ["std"]
 std = [
-	"serde",
 	"log/std",
-	"codec/std",
+	"parity-scale-codec/std",
 	"scale-info/std",
 	"sp-runtime/std",
 	"sp-std/std",
@@ -46,4 +43,7 @@ std = [
 	"xcm/std",
 	"module-support/std",
 ]
-try-runtime = ["frame-support/try-runtime"]
+try-runtime = [
+	"frame-support/try-runtime",
+	"frame-system/try-runtime",
+]

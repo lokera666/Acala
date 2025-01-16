@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -18,14 +18,16 @@
 
 use crate::setup::*;
 use crate::stable_asset::enable_stable_asset;
-use frame_support::weights::{DispatchClass, DispatchInfo, Pays, PostDispatchInfo, Weight};
+use frame_support::{
+	dispatch::{DispatchClass, DispatchInfo, Pays, PostDispatchInfo},
+	weights::Weight,
+};
 use module_support::AggregatedSwapPath;
 use sp_runtime::{
 	traits::{AccountIdConversion, SignedExtension, UniqueSaturatedInto},
 	transaction_validity::{InvalidTransaction, TransactionValidityError},
 	MultiAddress, Percent,
 };
-use xcm_executor::{traits::*, Assets, Config};
 
 fn fee_pool_size() -> Balance {
 	5 * dollar(NATIVE_CURRENCY)
@@ -39,13 +41,13 @@ fn init_charge_fee_pool(currency_id: CurrencyId) -> DispatchResult {
 	let fee_pool_size: u128 = fee_pool_size();
 
 	assert_ok!(Currencies::update_balance(
-		Origin::root(),
+		RuntimeOrigin::root(),
 		MultiAddress::Id(treasury_account.clone()),
 		currency_id.clone(),
 		ed,
 	));
 	assert_ok!(Currencies::update_balance(
-		Origin::root(),
+		RuntimeOrigin::root(),
 		MultiAddress::Id(treasury_account.clone()),
 		NATIVE_CURRENCY,
 		fee_pool_size.unique_saturated_into(),
@@ -55,7 +57,7 @@ fn init_charge_fee_pool(currency_id: CurrencyId) -> DispatchResult {
 	let native_amount: u128 = Currencies::free_balance(NATIVE_CURRENCY, &treasury_account);
 	let token_amount: u128 = Currencies::free_balance(currency_id.clone(), &treasury_account);
 	assert_ok!(TransactionPayment::enable_charge_fee_pool(
-		Origin::root(),
+		RuntimeOrigin::root(),
 		currency_id,
 		fee_pool_size,
 		Ratio::saturating_from_rational(35, 100).saturating_mul_int(dollar(NATIVE_CURRENCY)),
@@ -72,19 +74,19 @@ fn init_charge_fee_pool(currency_id: CurrencyId) -> DispatchResult {
 
 fn add_liquidity(token1: CurrencyId, token2: CurrencyId, amount1: Balance, amount2: Balance) -> DispatchResult {
 	assert_ok!(Currencies::update_balance(
-		Origin::root(),
+		RuntimeOrigin::root(),
 		MultiAddress::Id(AccountId::from(ALICE)),
 		token1,
 		amount1.unique_saturated_into(),
 	));
 	assert_ok!(Currencies::update_balance(
-		Origin::root(),
+		RuntimeOrigin::root(),
 		MultiAddress::Id(AccountId::from(ALICE)),
 		token2,
 		amount2.unique_saturated_into(),
 	));
 	Dex::add_liquidity(
-		Origin::signed(AccountId::from(ALICE)),
+		RuntimeOrigin::signed(AccountId::from(ALICE)),
 		token1,
 		token2,
 		amount1.unique_saturated_into(),
@@ -94,33 +96,36 @@ fn add_liquidity(token1: CurrencyId, token2: CurrencyId, amount1: Balance, amoun
 	)
 }
 
-const CALL: <Runtime as frame_system::Config>::Call = Call::Currencies(module_currencies::Call::transfer {
-	dest: MultiAddress::Id(AccountId::new([2u8; 32])),
-	currency_id: USD_CURRENCY,
-	amount: 12,
-});
+const CALL: <Runtime as frame_system::Config>::RuntimeCall =
+	RuntimeCall::Currencies(module_currencies::Call::transfer {
+		dest: MultiAddress::Id(AccountId::new([2u8; 32])),
+		currency_id: USD_CURRENCY,
+		amount: 12,
+	});
 pub const INFO: DispatchInfo = DispatchInfo {
-	weight: 100,
+	weight: Weight::from_parts(100, 0),
 	class: DispatchClass::Normal,
 	pays_fee: Pays::Yes,
 };
 pub const POST_INFO: PostDispatchInfo = PostDispatchInfo {
-	actual_weight: Some(80),
+	actual_weight: Some(Weight::from_parts(80, 0)),
 	pays_fee: Pays::Yes,
 };
 
-pub fn with_fee_currency_call(currency_id: CurrencyId) -> <Runtime as module_transaction_payment::Config>::Call {
-	let fee_call: <Runtime as module_transaction_payment::Config>::Call =
-		Call::TransactionPayment(module_transaction_payment::Call::with_fee_currency {
+pub fn with_fee_currency_call(currency_id: CurrencyId) -> <Runtime as module_transaction_payment::Config>::RuntimeCall {
+	let fee_call: <Runtime as module_transaction_payment::Config>::RuntimeCall =
+		RuntimeCall::TransactionPayment(module_transaction_payment::Call::with_fee_currency {
 			currency_id,
 			call: Box::new(CALL),
 		});
 	fee_call
 }
 
-pub fn with_fee_path_call(fee_swap_path: Vec<CurrencyId>) -> <Runtime as module_transaction_payment::Config>::Call {
-	let fee_call: <Runtime as module_transaction_payment::Config>::Call =
-		Call::TransactionPayment(module_transaction_payment::Call::with_fee_path {
+pub fn with_fee_path_call(
+	fee_swap_path: Vec<CurrencyId>,
+) -> <Runtime as module_transaction_payment::Config>::RuntimeCall {
+	let fee_call: <Runtime as module_transaction_payment::Config>::RuntimeCall =
+		RuntimeCall::TransactionPayment(module_transaction_payment::Call::with_fee_path {
 			fee_swap_path,
 			call: Box::new(CALL),
 		});
@@ -129,9 +134,9 @@ pub fn with_fee_path_call(fee_swap_path: Vec<CurrencyId>) -> <Runtime as module_
 
 pub fn with_fee_aggregated_path_call(
 	fee_aggregated_path: Vec<AggregatedSwapPath<CurrencyId>>,
-) -> <Runtime as module_transaction_payment::Config>::Call {
-	let fee_call: <Runtime as module_transaction_payment::Config>::Call =
-		Call::TransactionPayment(module_transaction_payment::Call::with_fee_aggregated_path {
+) -> <Runtime as module_transaction_payment::Config>::RuntimeCall {
+	let fee_call: <Runtime as module_transaction_payment::Config>::RuntimeCall =
+		RuntimeCall::TransactionPayment(module_transaction_payment::Call::with_fee_aggregated_path {
 			fee_aggregated_path,
 			call: Box::new(CALL),
 		});
@@ -165,21 +170,21 @@ fn initial_charge_fee_pool_works() {
 
 		// fee_pool_size lt ED can't enable fee pool
 		assert_ok!(Currencies::update_balance(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			MultiAddress::Id(treasury_account.clone()),
 			NATIVE_CURRENCY,
 			pool_size.unique_saturated_into(),
 		));
 		let led = (<Currencies as MultiCurrency<AccountId>>::minimum_balance(LIQUID_CURRENCY)).unique_saturated_into();
 		assert_ok!(Currencies::update_balance(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			MultiAddress::Id(treasury_account.clone()),
 			LIQUID_CURRENCY,
 			led,
 		));
 		assert_noop!(
 			TransactionPayment::enable_charge_fee_pool(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				LIQUID_CURRENCY,
 				NativeTokenExistentialDeposit::get() - 1,
 				Ratio::saturating_from_rational(35, 100).saturating_mul_int(dollar(NATIVE_CURRENCY))
@@ -188,7 +193,7 @@ fn initial_charge_fee_pool_works() {
 		);
 		assert_noop!(
 			TransactionPayment::enable_charge_fee_pool(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				LIQUID_CURRENCY,
 				pool_size,
 				Ratio::saturating_from_rational(35, 100).saturating_mul_int(dollar(NATIVE_CURRENCY))
@@ -217,65 +222,6 @@ fn initial_charge_fee_pool_works() {
 }
 
 #[test]
-fn trader_works() {
-	// 4 instructions, each instruction cost 200_000_000
-	let mut message = Xcm(vec![
-		ReserveAssetDeposited((Parent, 100).into()),
-		ClearOrigin,
-		BuyExecution {
-			fees: (Parent, 100).into(),
-			weight_limit: Limited(100),
-		},
-		DepositAsset {
-			assets: All.into(),
-			max_assets: 1,
-			beneficiary: Here.into(),
-		},
-	]);
-
-	let total_balance: Balance = 1_000_000_000;
-	let asset: MultiAsset = (Parent, total_balance).into();
-	let assets: Assets = asset.into();
-
-	let expect_unspent: MultiAsset = (Parent, total_balance - crate::relaychain::relay_per_second_as_fee(4)).into();
-	let xcm_weight: Weight = <XcmConfig as Config>::Weigher::weight(&mut message).unwrap();
-
-	ExtBuilder::default().build().execute_with(|| {
-		let mut trader = Trader::new();
-		let result_assets = trader.buy_weight(xcm_weight, assets.clone()).unwrap();
-		let unspent: Vec<MultiAsset> = result_assets.into();
-		assert_eq!(vec![expect_unspent.clone()], unspent);
-
-		let mut period_trader = TransactionFeePoolTrader::new();
-		let result_assets = period_trader.buy_weight(xcm_weight, assets.clone());
-		assert!(result_assets.is_err());
-	});
-
-	ExtBuilder::default().build().execute_with(|| {
-		assert_ok!(add_liquidity(
-			RELAY_CHAIN_CURRENCY,
-			NATIVE_CURRENCY,
-			100 * dollar(RELAY_CHAIN_CURRENCY),
-			10000 * dollar(NATIVE_CURRENCY)
-		));
-
-		assert_ok!(init_charge_fee_pool(RELAY_CHAIN_CURRENCY));
-
-		let relay_exchange_rate: Ratio =
-			module_transaction_payment::Pallet::<Runtime>::token_exchange_rate(RELAY_CHAIN_CURRENCY).unwrap();
-
-		let spent = crate::relaychain::token_per_second_as_fee(4, relay_exchange_rate);
-		let expect_unspent: MultiAsset = (Parent, total_balance - spent as u128).into();
-
-		// the newly `TransactionFeePoolTrader` works fine as first priority
-		let mut period_trader = TransactionFeePoolTrader::new();
-		let result_assets = period_trader.buy_weight(xcm_weight, assets);
-		let unspent: Vec<MultiAsset> = result_assets.unwrap().into();
-		assert_eq!(vec![expect_unspent.clone()], unspent);
-	});
-}
-
-#[test]
 fn charge_transaction_payment_and_threshold_works() {
 	let native_ed = NativeTokenExistentialDeposit::get();
 	let pool_size = fee_pool_size();
@@ -294,7 +240,7 @@ fn charge_transaction_payment_and_threshold_works() {
 			for token in vec![RELAY_CHAIN_CURRENCY, USD_CURRENCY, LIQUID_CURRENCY] {
 				assert_noop!(
 					TransactionPayment::enable_charge_fee_pool(
-						Origin::root(),
+						RuntimeOrigin::root(),
 						token,
 						fee_pool_size(),
 						Ratio::saturating_from_rational(35, 100).saturating_mul_int(dollar(NATIVE_CURRENCY)),
@@ -426,15 +372,27 @@ fn charge_transaction_payment_and_threshold_works() {
 
 #[test]
 fn with_fee_currency_call_works() {
-	with_fee_call_works(with_fee_currency_call(LIQUID_CURRENCY), false);
+	let amount = with_fee_call_works(with_fee_currency_call(LIQUID_CURRENCY), false);
+	#[cfg(feature = "with-mandala-runtime")]
+	assert_debug_snapshot!(amount, @"12701470465");
+	#[cfg(feature = "with-karura-runtime")]
+	assert_debug_snapshot!(amount, @"12726949844");
+	#[cfg(feature = "with-acala-runtime")]
+	assert_debug_snapshot!(amount, @"12726949844");
 }
 
 #[test]
 fn with_fee_path_call_works() {
-	with_fee_call_works(
+	let amount = with_fee_call_works(
 		with_fee_path_call(vec![LIQUID_CURRENCY, USD_CURRENCY, NATIVE_CURRENCY]),
 		false,
 	);
+	#[cfg(feature = "with-mandala-runtime")]
+	assert_debug_snapshot!(amount, @"12701470465");
+	#[cfg(feature = "with-karura-runtime")]
+	assert_debug_snapshot!(amount, @"12726949844");
+	#[cfg(feature = "with-acala-runtime")]
+	assert_debug_snapshot!(amount, @"12726949844");
 }
 
 #[test]
@@ -443,13 +401,22 @@ fn with_fee_aggregated_path_call_works() {
 		AggregatedSwapPath::<CurrencyId>::Taiga(0, 0, 1),
 		AggregatedSwapPath::<CurrencyId>::Dex(vec![LIQUID_CURRENCY, USD_CURRENCY, NATIVE_CURRENCY]),
 	];
-	with_fee_call_works(with_fee_aggregated_path_call(aggregated_path), true);
+	let amount = with_fee_call_works(with_fee_aggregated_path_call(aggregated_path), true);
+	#[cfg(feature = "with-mandala-runtime")]
+	assert_debug_snapshot!(amount, @"12701470465");
+	#[cfg(feature = "with-karura-runtime")]
+	assert_debug_snapshot!(amount, @"12726949844");
+	#[cfg(feature = "with-acala-runtime")]
+	assert_debug_snapshot!(amount, @"12726949844");
 }
 
-fn with_fee_call_works(with_fee_call: <Runtime as module_transaction_payment::Config>::Call, is_aggregated_call: bool) {
+fn with_fee_call_works(
+	with_fee_call: <Runtime as module_transaction_payment::Config>::RuntimeCall,
+	is_aggregated_call: bool,
+) -> Balance {
 	let init_amount = 100 * dollar(LIQUID_CURRENCY);
 	let ausd_acc: AccountId = TransactionPaymentPalletId::get().into_sub_account_truncating(USD_CURRENCY);
-	ExtBuilder::default()
+	return ExtBuilder::default()
 		.balances(vec![
 			// ALICE for stable asset, BOB and CHARLIE for transaction payment
 			(
@@ -511,7 +478,7 @@ fn with_fee_call_works(with_fee_call: <Runtime as module_transaction_payment::Co
 			if is_aggregated_call {
 				assert!(System::events().iter().any(|r| matches!(
 					r.event,
-					Event::StableAsset(nutsfinance_stable_asset::Event::TokenSwapped {
+					RuntimeEvent::StableAsset(nutsfinance_stable_asset::Event::TokenSwapped {
 						pool_id: 0,
 						a: 1000,
 						input_asset: RELAY_CHAIN_CURRENCY,
@@ -523,7 +490,7 @@ fn with_fee_call_works(with_fee_call: <Runtime as module_transaction_payment::Co
 			assert!(System::events().iter().any(|r| matches!(
 				r.event,
 				// LIQUID_CURRENCY, USD_CURRENCY, NATIVE_CURRENCY
-				Event::Dex(module_dex::Event::Swap { .. })
+				RuntimeEvent::Dex(module_dex::Event::Swap { .. })
 			)));
 			// Bob don't have any USD currency.
 			assert_noop!(
@@ -545,17 +512,29 @@ fn with_fee_call_works(with_fee_call: <Runtime as module_transaction_payment::Co
 					50
 				)
 			);
-			#[cfg(feature = "with-karura-runtime")]
-			let amount = 12726949872;
-			#[cfg(feature = "with-acala-runtime")]
-			let amount = 12726949872;
-			#[cfg(feature = "with-mandala-runtime")]
-			let amount = 13264589868;
-			System::assert_has_event(Event::Tokens(orml_tokens::Event::Transfer {
-				currency_id: USD_CURRENCY,
-				from: AccountId::from(CHARLIE),
-				to: ausd_acc.clone(),
-				amount,
-			}));
+
+			let amount = System::events()
+				.iter()
+				.filter_map(|r| {
+					if let RuntimeEvent::Tokens(orml_tokens::Event::Transfer {
+						ref currency_id,
+						ref from,
+						ref to,
+						amount,
+					}) = r.event
+					{
+						if *currency_id == USD_CURRENCY && *from == AccountId::from(CHARLIE) && *to == ausd_acc {
+							Some(amount)
+						} else {
+							None
+						}
+					} else {
+						None
+					}
+				})
+				.next()
+				.unwrap();
+
+			return amount;
 		});
 }

@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,28 +21,23 @@
 #![cfg(test)]
 
 use super::*;
-use frame_support::{
-	construct_runtime, ord_parameter_types, parameter_types,
-	traits::{ConstU64, Everything, Nothing},
-};
+use frame_support::{construct_runtime, derive_impl, ord_parameter_types, parameter_types, traits::Nothing};
 use frame_system::EnsureSignedBy;
+use module_support::{mocks::MockErc20InfoMapping, ExchangeRate, SwapLimit};
 use orml_traits::{parameter_type_with_key, DataFeeder};
 use primitives::{currency::DexShare, Amount, TokenSymbol};
-use sp_core::{H160, H256};
+use sp_core::H160;
 use sp_runtime::{
-	testing::Header,
 	traits::{IdentityLookup, One as OneT, Zero},
-	DispatchError, FixedPointNumber,
+	BuildStorage, DispatchError, FixedPointNumber,
 };
-use sp_std::cell::RefCell;
-use support::{mocks::MockErc20InfoMapping, ExchangeRate, SwapLimit};
 
 pub type AccountId = u128;
 pub type BlockNumber = u64;
 
 pub const ACA: CurrencyId = CurrencyId::Token(TokenSymbol::ACA);
 pub const AUSD: CurrencyId = CurrencyId::Token(TokenSymbol::AUSD);
-pub const BTC: CurrencyId = CurrencyId::Token(TokenSymbol::RENBTC);
+pub const TAI: CurrencyId = CurrencyId::Token(TokenSymbol::TAI);
 pub const DOT: CurrencyId = CurrencyId::Token(TokenSymbol::DOT);
 pub const LDOT: CurrencyId = CurrencyId::Token(TokenSymbol::LDOT);
 pub const KSM: CurrencyId = CurrencyId::Token(TokenSymbol::KSM);
@@ -57,48 +52,29 @@ mod prices {
 	pub use super::super::*;
 }
 
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
 impl frame_system::Config for Runtime {
-	type Origin = Origin;
-	type Index = u64;
-	type BlockNumber = BlockNumber;
-	type Call = Call;
-	type Hash = H256;
-	type Hashing = ::sp_runtime::traits::BlakeTwo256;
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
-	type Header = Header;
-	type Event = Event;
-	type BlockHashCount = ConstU64<250>;
-	type BlockWeights = ();
-	type BlockLength = ();
-	type Version = ();
-	type PalletInfo = PalletInfo;
+	type Block = Block;
 	type AccountData = ();
-	type OnNewAccount = ();
-	type OnKilledAccount = ();
-	type DbWeight = ();
-	type BaseCallFilter = Everything;
-	type SystemWeightInfo = ();
-	type SS58Prefix = ();
-	type OnSetCode = ();
-	type MaxConsumers = ConstU32<16>;
 }
 
-thread_local! {
-	static CHANGED: RefCell<bool> = RefCell::new(false);
+parameter_types! {
+	static Changed: bool = false;
 }
 
 pub fn mock_oracle_update() {
-	CHANGED.with(|v| *v.borrow_mut() = true)
+	Changed::mutate(|v| *v = true)
 }
 
 pub struct MockDataProvider;
 impl DataProvider<CurrencyId, Price> for MockDataProvider {
 	fn get(currency_id: &CurrencyId) -> Option<Price> {
-		if CHANGED.with(|v| *v.borrow_mut()) {
+		if Changed::get() {
 			match *currency_id {
 				AUSD => None,
-				BTC => Some(Price::saturating_from_integer(40000)),
+				TAI => Some(Price::saturating_from_integer(40000)),
 				DOT => Some(Price::saturating_from_integer(10)),
 				ACA => Some(Price::saturating_from_integer(30)),
 				KSM => Some(Price::saturating_from_integer(200)),
@@ -107,7 +83,7 @@ impl DataProvider<CurrencyId, Price> for MockDataProvider {
 		} else {
 			match *currency_id {
 				AUSD => Some(Price::saturating_from_rational(99, 100)),
-				BTC => Some(Price::saturating_from_integer(50000)),
+				TAI => Some(Price::saturating_from_integer(50000)),
 				DOT => Some(Price::saturating_from_integer(100)),
 				ACA => Some(Price::zero()),
 				KSM => None,
@@ -118,7 +94,7 @@ impl DataProvider<CurrencyId, Price> for MockDataProvider {
 }
 
 impl DataFeeder<CurrencyId, Price, AccountId> for MockDataProvider {
-	fn feed_value(_: AccountId, _: CurrencyId, _: Price) -> sp_runtime::DispatchResult {
+	fn feed_value(_: Option<AccountId>, _: CurrencyId, _: Price) -> sp_runtime::DispatchResult {
 		Ok(())
 	}
 }
@@ -200,19 +176,17 @@ parameter_type_with_key! {
 }
 
 impl orml_tokens::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Balance = Balance;
 	type Amount = Amount;
 	type CurrencyId = CurrencyId;
 	type WeightInfo = ();
 	type ExistentialDeposits = ExistentialDeposits;
-	type OnDust = ();
+	type CurrencyHooks = ();
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = [u8; 8];
 	type DustRemovalWhitelist = Nothing;
-	type OnNewTokenAccount = ();
-	type OnKilledTokenAccount = ();
 }
 
 impl BlockNumberProvider for MockRelayBlockNumberProvider {
@@ -258,7 +232,7 @@ parameter_types! {
 }
 
 impl Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Source = MockDataProvider;
 	type GetStableCurrencyId = GetStableCurrencyId;
 	type StableCurrencyFixedPrice = StableCurrencyFixedPrice;
@@ -276,18 +250,13 @@ impl Config for Runtime {
 	type WeightInfo = ();
 }
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
 type Block = frame_system::mocking::MockBlock<Runtime>;
 
 construct_runtime!(
-	pub enum Runtime where
-		Block = Block,
-		NodeBlock = Block,
-		UncheckedExtrinsic = UncheckedExtrinsic
-	{
-		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		PricesModule: prices::{Pallet, Storage, Call, Event<T>},
-		Tokens: orml_tokens::{Pallet, Call, Storage, Event<T>},
+	pub enum Runtime {
+		System: frame_system,
+		PricesModule: prices,
+		Tokens: orml_tokens,
 	}
 );
 
@@ -301,8 +270,8 @@ impl Default for ExtBuilder {
 
 impl ExtBuilder {
 	pub fn build(self) -> sp_io::TestExternalities {
-		let t = frame_system::GenesisConfig::default()
-			.build_storage::<Runtime>()
+		let t = frame_system::GenesisConfig::<Runtime>::default()
+			.build_storage()
 			.unwrap();
 
 		t.into()

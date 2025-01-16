@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@
 use sp_std::vec;
 
 use frame_benchmarking::{account, benchmarks};
-use frame_support::{dispatch::DispatchErrorWithPostInfo, traits::Get, weights::DispatchClass};
+use frame_support::{dispatch::DispatchClass, dispatch::DispatchErrorWithPostInfo, traits::Get};
 use frame_system::RawOrigin;
 use sp_runtime::traits::{AccountIdConversion, StaticLookup, UniqueSaturatedInto};
 use sp_std::collections::btree_map::BTreeMap;
@@ -155,49 +155,30 @@ mod mock {
 	use super::*;
 	use crate as nft;
 
-	use codec::{Decode, Encode};
 	use frame_support::{
-		parameter_types,
-		traits::{ConstU128, ConstU32, ConstU64, Contains, InstanceFilter},
-		PalletId, RuntimeDebug,
+		derive_impl, parameter_types,
+		traits::{ConstU128, ConstU32, Contains, InstanceFilter},
+		PalletId,
 	};
-	use sp_core::{crypto::AccountId32, H256};
+	use parity_scale_codec::{Decode, Encode};
+	use sp_core::crypto::AccountId32;
 	use sp_runtime::{
-		testing::Header,
 		traits::{BlakeTwo256, IdentityLookup},
+		BuildStorage, RuntimeDebug,
 	};
 
 	pub type AccountId = AccountId32;
 
+	#[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
 	impl frame_system::Config for Runtime {
-		type BaseCallFilter = BaseFilter;
-		type Origin = Origin;
-		type Index = u64;
-		type BlockNumber = u64;
-		type Hash = H256;
-		type Call = Call;
-		type Hashing = BlakeTwo256;
 		type AccountId = AccountId;
 		type Lookup = IdentityLookup<Self::AccountId>;
-		type Header = Header;
-		type Event = ();
-		type BlockHashCount = ConstU64<250>;
-		type BlockWeights = ();
-		type BlockLength = ();
-		type DbWeight = ();
-		type Version = ();
-		type PalletInfo = PalletInfo;
+		type Block = Block;
 		type AccountData = pallet_balances::AccountData<Balance>;
-		type OnNewAccount = ();
-		type OnKilledAccount = ();
-		type SystemWeightInfo = ();
-		type SS58Prefix = ();
-		type OnSetCode = ();
-		type MaxConsumers = ConstU32<16>;
 	}
 	impl pallet_balances::Config for Runtime {
 		type Balance = Balance;
-		type Event = ();
+		type RuntimeEvent = RuntimeEvent;
 		type DustRemoval = ();
 		type ExistentialDeposit = ConstU128<1>;
 		type AccountStore = frame_system::Pallet<Runtime>;
@@ -205,10 +186,14 @@ mod mock {
 		type MaxReserves = ConstU32<50>;
 		type ReserveIdentifier = ReserveIdentifier;
 		type WeightInfo = ();
+		type RuntimeHoldReason = RuntimeHoldReason;
+		type RuntimeFreezeReason = RuntimeFreezeReason;
+		type FreezeIdentifier = ();
+		type MaxFreezes = ();
 	}
 	impl pallet_utility::Config for Runtime {
-		type Event = ();
-		type Call = Call;
+		type RuntimeEvent = RuntimeEvent;
+		type RuntimeCall = RuntimeCall;
 		type PalletsOrigin = OriginCaller;
 		type WeightInfo = ();
 	}
@@ -223,12 +208,15 @@ mod mock {
 			Self::Any
 		}
 	}
-	impl InstanceFilter<Call> for ProxyType {
-		fn filter(&self, c: &Call) -> bool {
+	impl InstanceFilter<RuntimeCall> for ProxyType {
+		fn filter(&self, c: &RuntimeCall) -> bool {
 			match self {
 				ProxyType::Any => true,
-				ProxyType::JustTransfer => matches!(c, Call::Balances(pallet_balances::Call::transfer { .. })),
-				ProxyType::JustUtility => matches!(c, Call::Utility(..)),
+				ProxyType::JustTransfer => matches!(
+					c,
+					RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death { .. })
+				),
+				ProxyType::JustUtility => matches!(c, RuntimeCall::Utility(..)),
 			}
 		}
 		fn is_superset(&self, o: &Self) -> bool {
@@ -236,19 +224,19 @@ mod mock {
 		}
 	}
 	pub struct BaseFilter;
-	impl Contains<Call> for BaseFilter {
-		fn contains(c: &Call) -> bool {
+	impl Contains<RuntimeCall> for BaseFilter {
+		fn contains(c: &RuntimeCall) -> bool {
 			match *c {
 				// Remark is used as a no-op call in the benchmarking
-				Call::System(SystemCall::remark { .. }) => true,
-				Call::System(_) => false,
+				RuntimeCall::System(SystemCall::remark { .. }) => true,
+				RuntimeCall::System(_) => false,
 				_ => true,
 			}
 		}
 	}
 	impl pallet_proxy::Config for Runtime {
-		type Event = ();
-		type Call = Call;
+		type RuntimeEvent = RuntimeEvent;
+		type RuntimeCall = RuntimeCall;
 		type Currency = Balances;
 		type ProxyType = ProxyType;
 		type ProxyDepositBase = ConstU128<1>;
@@ -266,7 +254,7 @@ mod mock {
 	}
 
 	impl crate::Config for Runtime {
-		type Event = ();
+		type RuntimeEvent = RuntimeEvent;
 		type Currency = Balances;
 		type CreateClassDeposit = ConstU128<200>;
 		type CreateTokenDeposit = ConstU128<100>;
@@ -285,29 +273,24 @@ mod mock {
 		type MaxTokenMetadata = ConstU32<1024>;
 	}
 
-	type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
 	type Block = frame_system::mocking::MockBlock<Runtime>;
 
 	frame_support::construct_runtime!(
-		pub enum Runtime where
-			Block = Block,
-			NodeBlock = Block,
-			UncheckedExtrinsic = UncheckedExtrinsic,
-		{
-			System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-			Utility: pallet_utility::{Pallet, Call, Event},
-			Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-			Proxy: pallet_proxy::{Pallet, Call, Storage, Event<T>},
-			OrmlNFT: orml_nft::{Pallet, Storage, Config<T>},
-			NFT: nft::{Pallet, Call, Event<T>},
+		pub enum Runtime {
+			System: frame_system,
+			Utility: pallet_utility,
+			Balances: pallet_balances,
+			Proxy: pallet_proxy,
+			OrmlNFT: orml_nft,
+			NFT: nft,
 		}
 	);
 
 	use frame_system::Call as SystemCall;
 
 	pub fn new_test_ext() -> sp_io::TestExternalities {
-		let t = frame_system::GenesisConfig::default()
-			.build_storage::<Runtime>()
+		let t = frame_system::GenesisConfig::<Runtime>::default()
+			.build_storage()
 			.unwrap();
 
 		let mut ext = sp_io::TestExternalities::new(t);

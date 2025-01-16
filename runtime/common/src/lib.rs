@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,29 +21,32 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![recursion_limit = "256"]
 
-use codec::{Decode, Encode, MaxEncodedLen};
-use cumulus_pallet_parachain_system::CheckAssociatedRelayNumber;
+use cumulus_pallet_parachain_system::{CheckAssociatedRelayNumber, RelayChainStateProof};
 use frame_support::{
+	dispatch::DispatchClass,
 	parameter_types,
-	traits::{Contains, EitherOfDiverse, Get},
+	traits::{Contains, EitherOfDiverse, Get, Randomness},
 	weights::{
-		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, WEIGHT_PER_MILLIS},
-		DispatchClass, Weight,
+		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, WEIGHT_REF_TIME_PER_SECOND},
+		Weight,
 	},
-	RuntimeDebug,
 };
-use frame_system::{limits, EnsureRoot};
-use module_evm::GenesisAccount;
-use orml_traits::GetByKey;
-use polkadot_parachain::primitives::RelayChainBlockNumber;
+use frame_system::{limits, pallet_prelude::BlockNumberFor, EnsureRoot};
+use orml_traits::{currency::MutationHooks, GetByKey};
+use parity_scale_codec::{Decode, Encode, MaxEncodedLen};
+use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
 use primitives::{
 	evm::{is_system_contract, CHAIN_ID_ACALA_TESTNET, CHAIN_ID_KARURA_TESTNET, CHAIN_ID_MANDALA},
-	Balance, CurrencyId, Nonce,
+	Balance, CurrencyId,
 };
 use scale_info::TypeInfo;
-use sp_core::{Bytes, H160};
-use sp_runtime::{traits::Convert, transaction_validity::TransactionPriority, Perbill};
-use sp_std::{collections::btree_map::BTreeMap, marker::PhantomData, prelude::*};
+use sp_core::H160;
+use sp_runtime::{
+	traits::{Convert, Hash},
+	transaction_validity::TransactionPriority,
+	Perbill, RuntimeDebug, Saturating,
+};
+use sp_std::{marker::PhantomData, prelude::*};
 use static_assertions::const_assert;
 
 pub use check_nonce::CheckNonce;
@@ -53,21 +56,22 @@ pub use precompile::{
 	SchedulePrecompile, StableAssetPrecompile,
 };
 pub use primitives::{
-	currency::{
-		TokenInfo, ACA, AUSD, BNC, DOT, KAR, KBTC, KINT, KSM, KUSD, LCDOT, LDOT, LKSM, PHA, RENBTC, TAI, TAP, VSKSM,
-	},
+	currency::{TokenInfo, ACA, AUSD, BNC, DOT, KAR, KBTC, KINT, KSM, KUSD, LCDOT, LDOT, LKSM, PHA, TAI, TAP, VSKSM},
 	AccountId,
 };
-pub use xcm_impl::{local_currency_location, native_currency_location, AcalaDropAssets, FixedRateOfAsset};
+pub use xcm_impl::{local_currency_location, native_currency_location, AcalaDropAssets, FixedRateOfAsset, XcmExecutor};
 
+#[cfg(feature = "std")]
+use module_evm::GenesisAccount;
 #[cfg(feature = "std")]
 use sp_core::bytes::from_hex;
 #[cfg(feature = "std")]
-use std::str::FromStr;
+use std::{collections::btree_map::BTreeMap, str::FromStr};
 
 pub mod bench;
 pub mod check_nonce;
 pub mod precompile;
+pub mod xcm_config;
 pub mod xcm_impl;
 
 mod gas_to_weight_ratio;
@@ -94,14 +98,13 @@ parameter_types! {
 		.expect("Check that there is no overflow here");
 	pub CdpEngineUnsignedPriority: TransactionPriority = MinOperationalPriority::get() - 1000;
 	pub AuctionManagerUnsignedPriority: TransactionPriority = MinOperationalPriority::get() - 2000;
-	pub RenvmBridgeUnsignedPriority: TransactionPriority = MinOperationalPriority::get() - 3000;
 }
 
 /// The call is allowed only if caller is a system contract.
 pub struct SystemContractsFilter;
 impl PrecompileCallerFilter for SystemContractsFilter {
 	fn is_allowed(caller: H160) -> bool {
-		is_system_contract(caller)
+		is_system_contract(&caller)
 	}
 }
 
@@ -109,7 +112,7 @@ impl PrecompileCallerFilter for SystemContractsFilter {
 pub struct GasToWeight;
 impl Convert<u64, Weight> for GasToWeight {
 	fn convert(gas: u64) -> Weight {
-		gas.saturating_mul(gas_to_weight_ratio::RATIO)
+		Weight::from_parts(gas.saturating_mul(gas_to_weight_ratio::RATIO), 0)
 	}
 }
 
@@ -133,6 +136,7 @@ pub struct WeightToGas;
 impl Convert<Weight, u64> for WeightToGas {
 	fn convert(weight: Weight) -> u64 {
 		weight
+			.ref_time()
 			.checked_div(gas_to_weight_ratio::RATIO)
 			.expect("Compile-time constant is not zero; qed;")
 	}
@@ -162,8 +166,13 @@ impl<EvmChainID: Get<u64>, RelayNumberStrictlyIncreases: CheckAssociatedRelayNum
 pub const AVERAGE_ON_INITIALIZE_RATIO: Perbill = Perbill::from_percent(10);
 /// The ratio that `Normal` extrinsics should occupy. Start from a conservative value.
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(70);
-/// Parachain only have 0.5 second of computation time.
-pub const MAXIMUM_BLOCK_WEIGHT: Weight = 500 * WEIGHT_PER_MILLIS;
+/// We allow for 0.5 seconds of compute with a 12 second average block time.
+pub const MAXIMUM_BLOCK_WEIGHT: Weight = Weight::from_parts(
+	WEIGHT_REF_TIME_PER_SECOND.saturating_div(2),
+	// TODO: drop `* 10` after https://github.com/paritytech/substrate/issues/13501
+	// and the benchmarked size is not 10x of the measured size
+	polkadot_primitives::v7::MAX_POV_SIZE as u64 * 10,
+);
 
 const_assert!(NORMAL_DISPATCH_RATIO.deconstruct() >= AVERAGE_ON_INITIALIZE_RATIO.deconstruct());
 
@@ -346,6 +355,9 @@ pub type EnsureRootOrThreeFourthsTechnicalCommittee = EitherOfDiverse<
 	pallet_collective::EnsureProportionAtLeast<AccountId, TechnicalCommitteeInstance, 3, 4>,
 >;
 
+pub type EnsureRootOrOneTechnicalCommittee =
+	EitherOfDiverse<EnsureRoot<AccountId>, pallet_collective::EnsureMember<AccountId, TechnicalCommitteeInstance>>;
+
 /// The type used to represent the kinds of proxying allowed.
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Encode, Decode, RuntimeDebug, MaxEncodedLen, TypeInfo)]
 pub enum ProxyType {
@@ -367,6 +379,22 @@ impl Default for ProxyType {
 	}
 }
 
+pub struct CurrencyHooks<T, DustAccount>(PhantomData<T>, DustAccount);
+impl<T, DustAccount> MutationHooks<T::AccountId, T::CurrencyId, T::Balance> for CurrencyHooks<T, DustAccount>
+where
+	T: orml_tokens::Config,
+	DustAccount: Get<<T as frame_system::Config>::AccountId>,
+{
+	type OnDust = orml_tokens::TransferDust<T, DustAccount>;
+	type OnSlash = ();
+	type PreDeposit = ();
+	type PostDeposit = ();
+	type PreTransfer = ();
+	type PostTransfer = ();
+	type OnNewTokenAccount = ();
+	type OnKilledTokenAccount = ();
+}
+
 pub struct EvmLimits<T>(PhantomData<T>);
 impl<T> EvmLimits<T>
 where
@@ -384,9 +412,57 @@ where
 	}
 }
 
+pub struct RandomnessSource<T>(sp_std::marker::PhantomData<T>);
+impl<T: frame_system::Config> Randomness<T::Hash, BlockNumberFor<T>> for RandomnessSource<T>
+where
+	T: frame_system::Config + cumulus_pallet_parachain_system::Config + parachain_info::Config,
+{
+	fn random(subject: &[u8]) -> (T::Hash, BlockNumberFor<T>) {
+		// If the relay randomness is not accessible, so insecure randomness is used and marked as stale
+		// with a block number of zero
+		let mut randomness: [u8; 32] = [0u8; 32];
+		randomness.clone_from_slice(frame_system::Pallet::<T>::parent_hash().as_ref());
+		let mut block_number = BlockNumberFor::<T>::default();
+
+		// ValidationData is removed at on_initialize and set at the inherent, this means it could be empty
+		// in the on_initialize hook for some pallets and some other inherents so this could fail when
+		// invoked by scheduler or some other pallet's on_initialize hook
+		if let Some(validation_data) = cumulus_pallet_parachain_system::ValidationData::<T>::get() {
+			let relay_storage_root = validation_data.relay_parent_storage_root;
+
+			if let Some(relay_state_proof) = cumulus_pallet_parachain_system::RelayStateProof::<T>::get() {
+				if let Ok(relay_chain_state_proof) = RelayChainStateProof::new(
+					parachain_info::Pallet::<T>::get(),
+					relay_storage_root,
+					relay_state_proof,
+				) {
+					if let Some(current_block_randomness) = relay_chain_state_proof
+						.read_optional_entry(polkadot_primitives::well_known_keys::CURRENT_BLOCK_RANDOMNESS)
+						.ok()
+						.flatten()
+					{
+						randomness = current_block_randomness;
+						// the randomness is from relaychain so there is a delay have a - 4 to indicate the randomness
+						// is from previous relay block
+						block_number = frame_system::Pallet::<T>::block_number().saturating_sub(4u8.into())
+					}
+				}
+			}
+		}
+
+		let mut subject = subject.to_vec();
+		subject.reserve(32); // RANDOMNESS_LENGTH is 32
+		subject.extend_from_slice(&randomness);
+
+		let random = T::Hashing::hash(&subject[..]);
+
+		(random, block_number)
+	}
+}
+
 #[cfg(feature = "std")]
 /// Returns `evm_genesis_accounts`
-pub fn evm_genesis(evm_accounts: Vec<H160>) -> BTreeMap<H160, GenesisAccount<Balance, Nonce>> {
+pub fn evm_genesis(evm_accounts: Vec<H160>) -> BTreeMap<H160, GenesisAccount<Balance, primitives::Nonce>> {
 	let contracts_json = &include_bytes!("../../../predeploy-contracts/resources/bytecodes.json")[..];
 	let contracts: Vec<(String, String, String)> = serde_json::from_slice(contracts_json).unwrap();
 	let mut accounts = BTreeMap::new();
@@ -395,7 +471,7 @@ pub fn evm_genesis(evm_accounts: Vec<H160>) -> BTreeMap<H160, GenesisAccount<Bal
 			nonce: 0u32,
 			balance: 0u128,
 			storage: BTreeMap::new(),
-			code: Bytes::from_str(&code_string).unwrap().0,
+			code: sp_core::Bytes::from_str(&code_string).unwrap().0,
 			enable_contract_development: false,
 		};
 
@@ -421,6 +497,22 @@ pub fn evm_genesis(evm_accounts: Vec<H160>) -> BTreeMap<H160, GenesisAccount<Bal
 	accounts
 }
 
+/// Maximum number of blocks simultaneously accepted by the Runtime, not yet included
+/// into the relay chain.
+pub const UNINCLUDED_SEGMENT_CAPACITY: u32 = 1;
+/// How many parachain blocks are processed by the relay chain per parent. Limits the
+/// number of blocks authored per slot.
+pub const BLOCK_PROCESSING_VELOCITY: u32 = 1;
+/// Relay chain slot duration, in milliseconds.
+pub const RELAY_CHAIN_SLOT_DURATION_MILLIS: u32 = 6000;
+
+pub type ConsensusHook<Runtime> = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
+	Runtime,
+	RELAY_CHAIN_SLOT_DURATION_MILLIS,
+	BLOCK_PROCESSING_VELOCITY,
+	UNINCLUDED_SEGMENT_CAPACITY,
+>;
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -444,6 +536,7 @@ mod tests {
 		let max_normal_priority: TransactionPriority = (MaxTipsOfPriority::get() / TipPerWeightStep::get()
 			* RuntimeBlockWeights::get()
 				.max_block
+				.ref_time()
 				.min(*RuntimeBlockLength::get().max.get(DispatchClass::Normal) as u64) as u128)
 			.try_into()
 			.expect("Check that there is no overflow here");

@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -20,21 +20,18 @@
 #![allow(clippy::unused_unit)]
 
 use ethereum_types::BigEndianHash;
-use frame_support::{
-	dispatch::{DispatchError, DispatchResult},
-	pallet_prelude::*,
-};
+use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
+use frame_system::pallet_prelude::*;
 use module_evm::{ExitReason, ExitSucceed};
-use num_enum::{IntoPrimitive, TryFromPrimitive};
-use primitive_types::H256;
-use primitives::{evm::EvmAddress, Balance};
-use sp_core::{H160, U256};
-use sp_runtime::{ArithmeticError, SaturatedConversion};
-use sp_std::vec::Vec;
-use support::{
+use module_support::{
 	evm::limits::{erc20, liquidation},
 	EVMBridge as EVMBridgeTrait, ExecutionMode, InvokeContext, LiquidationEvmBridge as LiquidationEvmBridgeT, EVM,
 };
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use primitives::{evm::EvmAddress, Balance};
+use sp_core::{H160, H256, U256};
+use sp_runtime::{ArithmeticError, DispatchError, SaturatedConversion};
+use sp_std::vec::Vec;
 
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type BalanceOf<T> = <<T as Config>::EVM as EVM<AccountIdOf<T>>>::Balance;
@@ -88,7 +85,7 @@ pub mod module {
 	pub struct Pallet<T>(_);
 
 	#[pallet::hooks]
-	impl<T: Config> Hooks<T::BlockNumber> for Pallet<T> {}
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {}
@@ -255,6 +252,26 @@ impl<T: Config> EVMBridgeTrait<AccountIdOf<T>, BalanceOf<T>> for EVMBridge<T> {
 	fn set_origin(origin: AccountIdOf<T>) {
 		T::EVM::set_origin(origin);
 	}
+
+	fn kill_origin() {
+		T::EVM::kill_origin();
+	}
+
+	fn push_xcm_origin(origin: AccountIdOf<T>) {
+		T::EVM::push_xcm_origin(origin);
+	}
+
+	fn pop_xcm_origin() {
+		T::EVM::pop_xcm_origin();
+	}
+
+	fn kill_xcm_origin() {
+		T::EVM::kill_xcm_origin();
+	}
+
+	fn get_real_or_xcm_origin() -> Option<AccountIdOf<T>> {
+		T::EVM::get_real_or_xcm_origin()
+	}
 }
 
 pub struct LiquidationEvmBridge<T>(sp_std::marker::PhantomData<T>);
@@ -351,16 +368,20 @@ impl<T: Config> Pallet<T> {
 			Error::<T>::InvalidReturnValue
 		);
 
-		let offset = U256::from_big_endian(&output[0..32]);
-		let length = U256::from_big_endian(&output[offset.as_usize()..offset.as_usize() + 32]);
+		let offset = U256::from_big_endian(output.get(0..32).unwrap_or_default());
+		let offset: usize = offset.try_into().map_err(|_| Error::<T>::InvalidReturnValue)?;
+		let offset_end = offset.checked_add(32).ok_or(Error::<T>::InvalidReturnValue)?;
+		let length = U256::from_big_endian(output.get(offset..offset_end).unwrap_or_default());
+		let length: usize = length.try_into().map_err(|_| Error::<T>::InvalidReturnValue)?;
+		let length_end = offset_end.checked_add(length).ok_or(Error::<T>::InvalidReturnValue)?;
 		ensure!(
 			// output is 32-byte aligned. ensure total_length >= offset + string length + string data length.
-			output.len() >= offset.as_usize() + 32 + length.as_usize(),
+			output.len() >= length_end,
 			Error::<T>::InvalidReturnValue
 		);
 
 		let mut data = Vec::new();
-		data.extend_from_slice(&output[offset.as_usize() + 32..offset.as_usize() + 32 + length.as_usize()]);
+		data.extend_from_slice(output.get(offset_end..length_end).unwrap_or_default());
 
 		Ok(data.to_vec())
 	}

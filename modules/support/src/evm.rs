@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU General Public License
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-use codec::{Decode, Encode};
+use parity_scale_codec::{Decode, Encode};
 use primitives::currency::AssetIds;
 use primitives::{
 	evm::{CallInfo, EvmAddress},
@@ -37,6 +37,11 @@ pub trait PrecompileCallerFilter {
 	fn is_allowed(caller: H160) -> bool;
 }
 
+/// Return true if the EVM precompile is paused.
+pub trait PrecompilePauseFilter {
+	fn is_paused(address: H160) -> bool;
+}
+
 /// An abstraction of EVM for EVMBridge
 pub trait EVM<AccountId> {
 	type Balance: AtLeast32BitUnsigned + Copy + MaybeSerializeDeserialize + Default;
@@ -52,8 +57,18 @@ pub trait EVM<AccountId> {
 
 	/// Get the real origin account and charge storage rent from the origin.
 	fn get_origin() -> Option<AccountId>;
-	/// Provide a method to set origin for `on_initialize`
+	/// Set the EVM origin
 	fn set_origin(origin: AccountId);
+	/// Kill the EVM origin
+	fn kill_origin();
+	/// Push new EVM origin in xcm
+	fn push_xcm_origin(origin: AccountId);
+	/// Pop EVM origin in xcm
+	fn pop_xcm_origin();
+	/// Kill the EVM origin in xcm
+	fn kill_xcm_origin();
+	/// Get the real origin account or xcm origin and charge storage rent from the origin.
+	fn get_real_or_xcm_origin() -> Option<AccountId>;
 }
 
 #[derive(Encode, Decode, Eq, PartialEq, Copy, Clone, RuntimeDebug)]
@@ -91,8 +106,18 @@ pub trait EVMBridge<AccountId, Balance> {
 	fn transfer(context: InvokeContext, to: EvmAddress, value: Balance) -> DispatchResult;
 	/// Get the real origin account and charge storage rent from the origin.
 	fn get_origin() -> Option<AccountId>;
-	/// Provide a method to set origin for `on_initialize`
+	/// Set the EVM origin
 	fn set_origin(origin: AccountId);
+	/// Kill the EVM origin
+	fn kill_origin();
+	/// Push new EVM origin in xcm
+	fn push_xcm_origin(origin: AccountId);
+	/// Pop EVM origin in xcm
+	fn pop_xcm_origin();
+	/// Kill the EVM origin in xcm
+	fn kill_xcm_origin();
+	/// Get the real origin account or xcm origin and charge storage rent from the origin.
+	fn get_real_or_xcm_origin() -> Option<AccountId>;
 }
 
 #[cfg(feature = "std")]
@@ -119,6 +144,13 @@ impl<AccountId, Balance: Default> EVMBridge<AccountId, Balance> for () {
 		None
 	}
 	fn set_origin(_origin: AccountId) {}
+	fn kill_origin() {}
+	fn push_xcm_origin(_origin: AccountId) {}
+	fn pop_xcm_origin() {}
+	fn kill_xcm_origin() {}
+	fn get_real_or_xcm_origin() -> Option<AccountId> {
+		None
+	}
 }
 
 /// EVM bridge for collateral liquidation.
@@ -158,7 +190,7 @@ pub trait EVMManager<AccountId, Balance> {
 	/// Query the constants `StorageDepositPerByte` value from evm module.
 	fn query_storage_deposit_per_byte() -> Balance;
 	/// Query the maintainer address from the ERC20 contract.
-	fn query_maintainer(contract: H160) -> Result<H160, DispatchError>;
+	fn query_maintainer(contract: &H160) -> Result<H160, DispatchError>;
 	/// Query the constants `DeveloperDeposit` value from evm module.
 	fn query_developer_deposit() -> Balance;
 	/// Query the constants `PublicationFee` value from evm module.
@@ -168,11 +200,11 @@ pub trait EVMManager<AccountId, Balance> {
 	/// Publish contract
 	fn publish_contract_precompile(who: AccountId, contract: H160) -> DispatchResult;
 	/// Query the developer status of an account
-	fn query_developer_status(who: AccountId) -> bool;
+	fn query_developer_status(who: &AccountId) -> bool;
 	/// Enable developer mode
-	fn enable_account_contract_development(who: AccountId) -> DispatchResult;
+	fn enable_account_contract_development(who: &AccountId) -> DispatchResult;
 	/// Disable developer mode
-	fn disable_account_contract_development(who: AccountId) -> DispatchResult;
+	fn disable_account_contract_development(who: &AccountId) -> DispatchResult;
 }
 
 /// An abstraction of EVMAccountsManager
@@ -207,13 +239,13 @@ pub trait AddressMapping<AccountId> {
 }
 
 /// A mapping between AssetId and AssetMetadata.
-pub trait AssetIdMapping<ForeignAssetId, MultiLocation, AssetMetadata> {
+pub trait AssetIdMapping<ForeignAssetId, Location, AssetMetadata> {
 	/// Returns the AssetMetadata associated with a given `AssetIds`.
 	fn get_asset_metadata(asset_ids: AssetIds) -> Option<AssetMetadata>;
 	/// Returns the MultiLocation associated with a given ForeignAssetId.
-	fn get_multi_location(foreign_asset_id: ForeignAssetId) -> Option<MultiLocation>;
+	fn get_location(foreign_asset_id: ForeignAssetId) -> Option<Location>;
 	/// Returns the CurrencyId associated with a given MultiLocation.
-	fn get_currency_id(multi_location: MultiLocation) -> Option<CurrencyId>;
+	fn get_currency_id(location: Location) -> Option<CurrencyId>;
 }
 
 /// A mapping between u32 and Erc20 address.

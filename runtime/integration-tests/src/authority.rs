@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -17,8 +17,14 @@
 // along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 use crate::setup::*;
-use frame_support::traits::{schedule::DispatchTime, OriginTrait};
+use frame_support::traits::{schedule::DispatchTime, Bounded, OriginTrait};
 use orml_authority::DelayedOrigin;
+use sp_io::hashing::blake2_256;
+
+fn bounded_call(call: RuntimeCall) -> Box<Bounded<RuntimeCall, <Runtime as frame_system::Config>::Hashing>> {
+	let encoded_call = call.encode();
+	Box::new(Bounded::Inline(encoded_call.try_into().unwrap()))
+}
 
 #[test]
 fn test_authority_module() {
@@ -43,22 +49,22 @@ fn test_authority_module() {
 		])
 		.build()
 		.execute_with(|| {
-			let ensure_root_call = Call::System(frame_system::Call::fill_block { ratio: Perbill::one() });
-			let call = Call::Authority(orml_authority::Call::dispatch_as {
+			let ensure_root_call = RuntimeCall::System(frame_system::Call::remark { remark: vec![] });
+			let call = RuntimeCall::Authority(orml_authority::Call::dispatch_as {
 				as_origin: AuthoritysOriginId::Root,
 				call: Box::new(ensure_root_call.clone()),
 			});
 
 			// dispatch_as
 			assert_ok!(Authority::dispatch_as(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				AuthoritysOriginId::Root,
 				Box::new(ensure_root_call.clone())
 			));
 
 			assert_noop!(
 				Authority::dispatch_as(
-					Origin::signed(AccountId::from(BOB)),
+					RuntimeOrigin::signed(AccountId::from(BOB)),
 					AuthoritysOriginId::Root,
 					Box::new(ensure_root_call.clone())
 				),
@@ -67,7 +73,7 @@ fn test_authority_module() {
 
 			assert_noop!(
 				Authority::dispatch_as(
-					Origin::signed(AccountId::from(BOB)),
+					RuntimeOrigin::signed(AccountId::from(BOB)),
 					AuthoritysOriginId::Treasury,
 					Box::new(ensure_root_call.clone())
 				),
@@ -77,12 +83,12 @@ fn test_authority_module() {
 			// schedule_dispatch
 			run_to_block(1);
 			// Treasury transfer
-			let transfer_call = Call::Currencies(module_currencies::Call::transfer {
+			let transfer_call = RuntimeCall::Currencies(module_currencies::Call::transfer {
 				dest: AccountId::from(BOB).into(),
 				currency_id: USD_CURRENCY,
 				amount: 500 * dollar(USD_CURRENCY),
 			});
-			let treasury_reserve_call = Call::Authority(orml_authority::Call::dispatch_as {
+			let treasury_reserve_call = RuntimeCall::Authority(orml_authority::Call::dispatch_as {
 				as_origin: AuthoritysOriginId::Treasury,
 				call: Box::new(transfer_call.clone()),
 			});
@@ -90,25 +96,25 @@ fn test_authority_module() {
 			let one_day_later = OneDay::get() + 1;
 
 			assert_ok!(Authority::schedule_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				DispatchTime::At(one_day_later),
 				0,
 				true,
-				Box::new(treasury_reserve_call.clone())
+				bounded_call(treasury_reserve_call)
 			));
 
 			assert_ok!(Authority::schedule_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				DispatchTime::At(one_day_later),
 				0,
 				true,
-				Box::new(call.clone())
+				bounded_call(call.clone())
 			));
-			System::assert_last_event(Event::Authority(orml_authority::Event::Scheduled {
-				origin: OriginCaller::Authority(DelayedOrigin {
-					delay: one_day_later - 1,
-					origin: Box::new(OriginCaller::system(RawOrigin::Root)),
-				}),
+			System::assert_last_event(RuntimeEvent::Authority(orml_authority::Event::Scheduled {
+				origin: OriginCaller::Authority(DelayedOrigin::new(
+					one_day_later - 1,
+					Box::new(OriginCaller::system(RawOrigin::Root)),
+				)),
 				index: 1,
 			}));
 
@@ -125,89 +131,115 @@ fn test_authority_module() {
 
 			// delay < SevenDays
 			#[cfg(feature = "with-mandala-runtime")]
-			System::assert_last_event(Event::Scheduler(pallet_scheduler::Event::<Runtime>::Dispatched {
-				task: (OneDay::get() + 1, 1),
-				id: Some([AUTHORITY_ORIGIN_ID, 32, 28, 0, 0, 0, 0, 1, 0, 0, 0].to_vec()),
-				result: Err(DispatchError::BadOrigin),
-			}));
+			System::assert_last_event(RuntimeEvent::Scheduler(
+				pallet_scheduler::Event::<Runtime>::Dispatched {
+					task: (OneDay::get() + 1, 1),
+					id: Some(blake2_256(
+						[AUTHORITY_ORIGIN_ID, 32, 28, 0, 0, 0, 0, 1, 0, 0, 0].as_ref(),
+					)),
+					result: Err(DispatchError::BadOrigin),
+				},
+			));
 			#[cfg(feature = "with-karura-runtime")]
-			System::assert_last_event(Event::Scheduler(pallet_scheduler::Event::<Runtime>::Dispatched {
-				task: (OneDay::get() + 1, 1),
-				id: Some([AUTHORITY_ORIGIN_ID, 32, 28, 0, 0, 0, 0, 1, 0, 0, 0].to_vec()),
-				result: Err(DispatchError::BadOrigin),
-			}));
+			System::assert_last_event(RuntimeEvent::Scheduler(
+				pallet_scheduler::Event::<Runtime>::Dispatched {
+					task: (OneDay::get() + 1, 1),
+					id: Some(blake2_256(
+						[AUTHORITY_ORIGIN_ID, 32, 28, 0, 0, 0, 0, 1, 0, 0, 0].as_ref(),
+					)),
+					result: Err(DispatchError::BadOrigin),
+				},
+			));
 			#[cfg(feature = "with-acala-runtime")]
-			System::assert_last_event(Event::Scheduler(pallet_scheduler::Event::<Runtime>::Dispatched {
-				task: (OneDay::get() + 1, 1),
-				id: Some([AUTHORITY_ORIGIN_ID, 32, 28, 0, 0, 0, 0, 1, 0, 0, 0].to_vec()),
-				result: Err(DispatchError::BadOrigin),
-			}));
+			System::assert_last_event(RuntimeEvent::Scheduler(
+				pallet_scheduler::Event::<Runtime>::Dispatched {
+					task: (OneDay::get() + 1, 1),
+					id: Some(blake2_256(
+						[AUTHORITY_ORIGIN_ID, 32, 28, 0, 0, 0, 0, 1, 0, 0, 0].as_ref(),
+					)),
+					result: Err(DispatchError::BadOrigin),
+				},
+			));
 
 			let seven_days_later = one_day_later + SevenDays::get() + 1;
 
 			// delay = SevenDays
 			assert_ok!(Authority::schedule_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				DispatchTime::At(seven_days_later),
 				0,
 				true,
-				Box::new(call.clone())
+				bounded_call(call.clone())
 			));
 
 			run_to_block(seven_days_later);
 
 			#[cfg(feature = "with-mandala-runtime")]
-			System::assert_last_event(Event::Scheduler(pallet_scheduler::Event::<Runtime>::Dispatched {
-				task: (seven_days_later, 0),
-				id: Some([AUTHORITY_ORIGIN_ID, 225, 196, 0, 0, 0, 0, 2, 0, 0, 0].to_vec()),
-				result: Ok(()),
-			}));
+			System::assert_last_event(RuntimeEvent::Scheduler(
+				pallet_scheduler::Event::<Runtime>::Dispatched {
+					task: (seven_days_later, 0),
+					id: Some(blake2_256(
+						[AUTHORITY_ORIGIN_ID, 225, 196, 0, 0, 0, 0, 2, 0, 0, 0].as_ref(),
+					)),
+					result: Ok(()),
+				},
+			));
 
 			#[cfg(feature = "with-karura-runtime")]
-			System::assert_last_event(Event::Scheduler(pallet_scheduler::Event::<Runtime>::Dispatched {
-				task: (seven_days_later, 0),
-				id: Some([AUTHORITY_ORIGIN_ID, 225, 196, 0, 0, 0, 0, 2, 0, 0, 0].to_vec()),
-				result: Ok(()),
-			}));
+			System::assert_last_event(RuntimeEvent::Scheduler(
+				pallet_scheduler::Event::<Runtime>::Dispatched {
+					task: (seven_days_later, 0),
+					id: Some(blake2_256(
+						[AUTHORITY_ORIGIN_ID, 225, 196, 0, 0, 0, 0, 2, 0, 0, 0].as_ref(),
+					)),
+					result: Ok(()),
+				},
+			));
 
 			#[cfg(feature = "with-acala-runtime")]
-			System::assert_last_event(Event::Scheduler(pallet_scheduler::Event::<Runtime>::Dispatched {
-				task: (seven_days_later, 0),
-				id: Some([AUTHORITY_ORIGIN_ID, 225, 196, 0, 0, 0, 0, 2, 0, 0, 0].to_vec()),
-				result: Ok(()),
-			}));
+			System::assert_last_event(RuntimeEvent::Scheduler(
+				pallet_scheduler::Event::<Runtime>::Dispatched {
+					task: (seven_days_later, 0),
+					id: Some(blake2_256(
+						[AUTHORITY_ORIGIN_ID, 225, 196, 0, 0, 0, 0, 2, 0, 0, 0].as_ref(),
+					)),
+					result: Ok(()),
+				},
+			));
 
 			// with_delayed_origin = false
 			assert_ok!(Authority::schedule_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				DispatchTime::At(seven_days_later + 1),
 				0,
 				false,
-				Box::new(call.clone())
+				bounded_call(call.clone())
 			));
-			System::assert_last_event(Event::Authority(orml_authority::Event::Scheduled {
+			System::assert_last_event(RuntimeEvent::Authority(orml_authority::Event::Scheduled {
 				origin: OriginCaller::system(RawOrigin::Root),
 				index: 3,
 			}));
 
 			run_to_block(seven_days_later + 1);
-			System::assert_last_event(Event::Scheduler(pallet_scheduler::Event::<Runtime>::Dispatched {
-				task: (seven_days_later + 1, 0),
-				id: Some([0, 0, 3, 0, 0, 0].to_vec()),
-				result: Ok(()),
-			}));
+			System::assert_last_event(RuntimeEvent::Scheduler(
+				pallet_scheduler::Event::<Runtime>::Dispatched {
+					task: (seven_days_later + 1, 0),
+					id: Some(blake2_256([0, 0, 3, 0, 0, 0].as_ref())),
+					result: Ok(()),
+				},
+			));
 
 			assert_ok!(Authority::schedule_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				DispatchTime::At(seven_days_later + 2),
 				0,
 				false,
-				Box::new(call.clone())
+				bounded_call(call.clone())
 			));
 
 			// fast_track_scheduled_dispatch
 			assert_ok!(Authority::fast_track_scheduled_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				Box::new(frame_system::RawOrigin::Root.into()),
 				4,
 				DispatchTime::At(seven_days_later + 3),
@@ -215,7 +247,7 @@ fn test_authority_module() {
 
 			// delay_scheduled_dispatch
 			assert_ok!(Authority::delay_scheduled_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				Box::new(frame_system::RawOrigin::Root.into()),
 				4,
 				4,
@@ -223,60 +255,56 @@ fn test_authority_module() {
 
 			// cancel_scheduled_dispatch
 			assert_ok!(Authority::schedule_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				DispatchTime::At(seven_days_later + 2),
 				0,
 				true,
-				Box::new(call.clone())
+				bounded_call(call.clone())
 			));
-			System::assert_last_event(Event::Authority(orml_authority::Event::Scheduled {
-				origin: OriginCaller::Authority(DelayedOrigin {
-					delay: 1,
-					origin: Box::new(OriginCaller::system(RawOrigin::Root)),
-				}),
+			System::assert_last_event(RuntimeEvent::Authority(orml_authority::Event::Scheduled {
+				origin: OriginCaller::Authority(DelayedOrigin::new(1, Box::new(OriginCaller::system(RawOrigin::Root)))),
 				index: 5,
 			}));
 
 			let schedule_origin = {
-				let origin: <Runtime as orml_authority::Config>::Origin = From::from(Origin::root());
-				let origin: <Runtime as orml_authority::Config>::Origin = From::from(DelayedOrigin::<
-					BlockNumber,
-					<Runtime as orml_authority::Config>::PalletsOrigin,
-				> {
-					delay: 1,
-					origin: Box::new(origin.caller().clone()),
-				});
+				let origin: <Runtime as orml_authority::Config>::RuntimeOrigin = From::from(RuntimeOrigin::root());
+				let origin: <Runtime as orml_authority::Config>::RuntimeOrigin =
+					From::from(DelayedOrigin::<
+						BlockNumber,
+						<Runtime as orml_authority::Config>::PalletsOrigin,
+					>::new(1, Box::new(origin.caller().clone())));
 				origin
 			};
 
 			let pallets_origin = Box::new(schedule_origin.caller().clone());
-			assert_ok!(Authority::cancel_scheduled_dispatch(Origin::root(), pallets_origin, 5));
-			System::assert_last_event(Event::Authority(orml_authority::Event::Cancelled {
-				origin: OriginCaller::Authority(DelayedOrigin {
-					delay: 1,
-					origin: Box::new(OriginCaller::system(RawOrigin::Root)),
-				}),
+			assert_ok!(Authority::cancel_scheduled_dispatch(
+				RuntimeOrigin::root(),
+				pallets_origin,
+				5
+			));
+			System::assert_last_event(RuntimeEvent::Authority(orml_authority::Event::Cancelled {
+				origin: OriginCaller::Authority(DelayedOrigin::new(1, Box::new(OriginCaller::system(RawOrigin::Root)))),
 				index: 5,
 			}));
 
 			assert_ok!(Authority::schedule_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				DispatchTime::At(seven_days_later + 3),
 				0,
 				false,
-				Box::new(call.clone())
+				bounded_call(call)
 			));
-			System::assert_last_event(Event::Authority(orml_authority::Event::Scheduled {
+			System::assert_last_event(RuntimeEvent::Authority(orml_authority::Event::Scheduled {
 				origin: OriginCaller::system(RawOrigin::Root),
 				index: 6,
 			}));
 
 			assert_ok!(Authority::cancel_scheduled_dispatch(
-				Origin::root(),
+				RuntimeOrigin::root(),
 				Box::new(frame_system::RawOrigin::Root.into()),
 				6
 			));
-			System::assert_last_event(Event::Authority(orml_authority::Event::Cancelled {
+			System::assert_last_event(RuntimeEvent::Authority(orml_authority::Event::Cancelled {
 				origin: OriginCaller::system(RawOrigin::Root),
 				index: 6,
 			}));
@@ -287,13 +315,13 @@ fn test_authority_module() {
 fn cancel_schedule_test() {
 	ExtBuilder::default().build().execute_with(|| {
 		assert_ok!(FinancialCouncil::set_members(
-			Origin::root(),
+			RuntimeOrigin::root(),
 			vec![AccountId::from(ALICE), AccountId::from(BOB), AccountId::from(CHARLIE)],
 			None,
 			5,
 		));
-		let council_call = Call::CdpEngine(module_cdp_engine::Call::set_collateral_params {
-			currency_id: RENBTC,
+		let council_call = RuntimeCall::CdpEngine(module_cdp_engine::Call::set_collateral_params {
+			currency_id: DOT,
 			interest_rate_per_sec: Change::NewValue(Some(Rate::saturating_from_rational(1, 100000))),
 			liquidation_ratio: Change::NewValue(Some(Ratio::saturating_from_rational(5, 2))),
 			liquidation_penalty: Change::NewValue(Some(Rate::saturating_from_rational(2, 10))),
@@ -306,7 +334,7 @@ fn cancel_schedule_test() {
 			DispatchTime::At(2),
 			0,
 			false,
-			Box::new(council_call.clone()),
+			bounded_call(council_call.clone()),
 		));
 
 		// canceling will not work if yes vote is less than the scheduled call
@@ -334,7 +362,7 @@ fn cancel_schedule_test() {
 			DispatchTime::At(2),
 			0,
 			false,
-			Box::new(council_call.clone()),
+			bounded_call(council_call),
 		));
 		// canceling works when yes vote is equal to the scheduled call
 		assert_ok!(Authority::cancel_scheduled_dispatch(

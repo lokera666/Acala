@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -36,50 +36,50 @@ fn currency_id_convert() {
 
 		assert_eq!(
 			CurrencyIdConvert::convert(RELAY_CHAIN_CURRENCY),
-			Some(MultiLocation::parent())
+			Some(Location::parent())
 		);
 
 		assert_eq!(
 			CurrencyIdConvert::convert(NATIVE_CURRENCY),
-			Some(MultiLocation::sibling_parachain_general_key(
+			Some(Location::sibling_parachain_general_key(
 				id,
 				NATIVE_CURRENCY.encode().try_into().unwrap()
 			))
 		);
 		assert_eq!(
 			CurrencyIdConvert::convert(USD_CURRENCY),
-			Some(MultiLocation::sibling_parachain_general_key(
+			Some(Location::sibling_parachain_general_key(
 				id,
 				USD_CURRENCY.encode().try_into().unwrap()
 			))
 		);
 		assert_eq!(
 			CurrencyIdConvert::convert(LIQUID_CURRENCY),
-			Some(MultiLocation::sibling_parachain_general_key(
+			Some(Location::sibling_parachain_general_key(
 				id,
 				LIQUID_CURRENCY.encode().try_into().unwrap()
 			))
 		);
 		assert_eq!(
-			CurrencyIdConvert::convert(MultiLocation::parent()),
+			CurrencyIdConvert::convert(Location::parent()),
 			Some(RELAY_CHAIN_CURRENCY)
 		);
 		assert_eq!(
-			CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+			CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 				id,
 				NATIVE_CURRENCY.encode().try_into().unwrap()
 			)),
 			Some(NATIVE_CURRENCY)
 		);
 		assert_eq!(
-			CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+			CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 				id,
 				USD_CURRENCY.encode().try_into().unwrap()
 			)),
 			Some(USD_CURRENCY)
 		);
 		assert_eq!(
-			CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+			CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 				id,
 				LIQUID_CURRENCY.encode().try_into().unwrap()
 			)),
@@ -95,58 +95,43 @@ fn currency_id_convert() {
 			assert_eq!(CurrencyIdConvert::convert(TAP), None);
 
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
-					id,
-					RENBTC.encode().try_into().unwrap()
-				)),
-				Some(RENBTC)
-			);
-			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					KAR.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					KUSD.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					KSM.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					LKSM.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					TAP.encode().try_into().unwrap()
 				)),
 				None
 			);
 
-			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
-					id + 1,
-					RENBTC.encode().try_into().unwrap()
-				)),
-				None
-			);
-
-			let native_currency: MultiAsset = (
-				MultiLocation::sibling_parachain_general_key(id, NATIVE_CURRENCY.encode().try_into().unwrap()),
+			let native_currency: Asset = (
+				Location::sibling_parachain_general_key(id, NATIVE_CURRENCY.encode().try_into().unwrap()),
 				1,
 			)
 				.into();
@@ -162,56 +147,56 @@ fn currency_id_convert() {
 			assert_eq!(CurrencyIdConvert::convert(TAP), None);
 
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					ACA.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					AUSD.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					DOT.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					LDOT.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					TAP.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					TAI.encode().try_into().unwrap()
 				)),
 				Some(TAI)
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					parachains::bifrost::ID,
 					parachains::bifrost::BNC_KEY.to_vec().try_into().unwrap()
 				)),
 				Some(BNC)
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					parachains::bifrost::ID,
 					parachains::bifrost::VSKSM_KEY.to_vec().try_into().unwrap()
 				)),
@@ -220,21 +205,21 @@ fn currency_id_convert() {
 
 			assert_eq!(
 				CurrencyIdConvert::convert(BNC),
-				Some(MultiLocation::sibling_parachain_general_key(
+				Some(Location::sibling_parachain_general_key(
 					parachains::bifrost::ID,
 					parachains::bifrost::BNC_KEY.to_vec().try_into().unwrap()
 				))
 			);
 			assert_eq!(
 				CurrencyIdConvert::convert(VSKSM),
-				Some(MultiLocation::sibling_parachain_general_key(
+				Some(Location::sibling_parachain_general_key(
 					parachains::bifrost::ID,
 					parachains::bifrost::VSKSM_KEY.to_vec().try_into().unwrap()
 				))
 			);
 
-			let native_currency: MultiAsset = (
-				MultiLocation::sibling_parachain_general_key(id, NATIVE_CURRENCY.encode().try_into().unwrap()),
+			let native_currency: Asset = (
+				Location::sibling_parachain_general_key(id, NATIVE_CURRENCY.encode().try_into().unwrap()),
 				1,
 			)
 				.into();
@@ -250,57 +235,50 @@ fn currency_id_convert() {
 			assert_eq!(CurrencyIdConvert::convert(TAI), None);
 
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
-					id,
-					RENBTC.encode().try_into().unwrap()
-				)),
-				None
-			);
-			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					KAR.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					KUSD.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					KSM.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					LKSM.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					TAI.encode().try_into().unwrap()
 				)),
 				None
 			);
 			assert_eq!(
-				CurrencyIdConvert::convert(MultiLocation::sibling_parachain_general_key(
+				CurrencyIdConvert::convert(Location::sibling_parachain_general_key(
 					id,
 					TAP.encode().try_into().unwrap()
 				)),
 				Some(TAP)
 			);
 
-			let native_currency: MultiAsset = (
-				MultiLocation::sibling_parachain_general_key(id, NATIVE_CURRENCY.encode().try_into().unwrap()),
+			let native_currency: Asset = (
+				Location::sibling_parachain_general_key(id, NATIVE_CURRENCY.encode().try_into().unwrap()),
 				1,
 			)
 				.into();
@@ -319,57 +297,32 @@ fn parachain_subaccounts_are_unique() {
 		);
 
 		assert_eq!(
-			create_x2_parachain_multilocation(0),
-			MultiLocation::new(
+			create_x2_parachain_location(0),
+			Location::new(
 				1,
-				X1(Junction::AccountId32 {
-					network: NetworkId::Any,
+				[Junction::AccountId32 {
+					network: None,
 					id: hex_literal::hex!["d7b8926b326dd349355a9a7cca6606c1e0eb6fd2b506066b518c7155ff0d8297"].into(),
-				})
+				}]
 			),
 		);
 		assert_eq!(
-			create_x2_parachain_multilocation(1),
-			MultiLocation::new(
+			create_x2_parachain_location(1),
+			Location::new(
 				1,
-				X1(Junction::AccountId32 {
-					network: NetworkId::Any,
+				[Junction::AccountId32 {
+					network: None,
 					id: hex_literal::hex!["74d37d762e06c6841a5dad64463a9afe0684f7e45245f6a7296ca613cca74669"].into(),
-				})
+				}]
 			),
 		);
-	});
-}
-
-#[test]
-#[should_panic(expected = "Relay chain block number needs to strictly increase between Parachain blocks!")]
-fn cumulus_check_relay_chain_block_number() {
-	ExtBuilder::default().build().execute_with(|| {
-		set_relaychain_block_number(10);
-		assert_eq!(ParachainSystem::validation_data().unwrap().relay_parent_number, 10);
-
-		// testnet skip checking relay chain block number
-		set_relaychain_block_number(9);
-		assert_eq!(ParachainSystem::validation_data().unwrap().relay_parent_number, 9);
-
-		// set mainnet ChainId
-		// only karura-mainnet and acala-mainnet check relay chain block number, use karura mainnet ChainId
-		// with mandala runtime
-		#[cfg(any(feature = "with-mandala-runtime", feature = "with-karura-runtime"))]
-		module_evm::ChainId::<Runtime>::set(CHAIN_ID_KARURA_MAINNET);
-		#[cfg(feature = "with-acala-runtime")]
-		module_evm::ChainId::<Runtime>::set(CHAIN_ID_ACALA_MAINNET);
-		set_relaychain_block_number(8);
 	});
 }
 
 #[cfg(feature = "with-mandala-runtime")]
 mod mandala_only_tests {
 	use super::*;
-	use ecosystem_renvm_bridge::EcdsaSignature;
 	use frame_support::dispatch::GetDispatchInfo;
-	use hex_literal::hex;
-	use mandala_runtime::RenVmBridge;
 	use module_transaction_payment::ChargeTransactionPayment;
 	use pallet_transaction_payment::InclusionFee;
 	use sp_runtime::{
@@ -380,7 +333,7 @@ mod mandala_only_tests {
 	#[test]
 	fn check_transaction_fee_for_empty_remark() {
 		ExtBuilder::default().build().execute_with(|| {
-			let call = Call::System(frame_system::Call::remark { remark: vec![] });
+			let call = RuntimeCall::System(frame_system::Call::remark { remark: vec![] });
 			let ext = UncheckedExtrinsic::new(call.into(), None).expect("This should not fail");
 			let bytes = ext.encode();
 
@@ -393,141 +346,173 @@ mod mandala_only_tests {
 				adjusted_weight_fee,
 			} = fee.inclusion_fee.unwrap();
 
-			assert_eq!(base_fee, 1_000_000_000);
-			assert_eq!(len_fee, 500_000_000);
-			assert_eq!(adjusted_weight_fee, 11587754);
+			assert_debug_snapshot!(base_fee, @"1000000000");
+			assert_debug_snapshot!(len_fee, @"50000000");
+			assert_debug_snapshot!(adjusted_weight_fee, @"10625773");
 
 			let total_fee = base_fee.saturating_add(len_fee).saturating_add(adjusted_weight_fee);
-			assert_eq!(total_fee, 1511587754);
+			assert_debug_snapshot!(total_fee, @"1060625773");
 		});
 	}
 
 	#[test]
 	fn check_tx_priority() {
 		ExtBuilder::default()
-		.balances(vec![
-			(alice(), NATIVE_CURRENCY, 20_000 * dollar(NATIVE_CURRENCY)),
-		])
-		.build().execute_with(|| {
-			// Ensure tx priority order:
-			// Inherent -> Operational tx -> Unsigned tx -> Signed normal tx
-			let call = Call::System(frame_system::Call::remark { remark: vec![] });
-			let bytes = UncheckedExtrinsic::new(call.clone().into(), None).expect("This should not fail").encode();
+			.balances(vec![(alice(), NATIVE_CURRENCY, 20_000 * dollar(NATIVE_CURRENCY))])
+			.build()
+			.execute_with(|| {
+				// Ensure tx priority order:
+				// Inherent -> Operational tx -> Unsigned tx -> Signed normal tx
+				let call = RuntimeCall::System(frame_system::Call::remark { remark: vec![] });
+				let bytes = UncheckedExtrinsic::new(call.clone().into(), None)
+					.expect("This should not fail")
+					.encode();
 
-			// tips = 0
-			assert_eq!(
-				ChargeTransactionPayment::<Runtime>::from(0).validate(
+				// tips = 0
+				assert_eq!(
+					ChargeTransactionPayment::<Runtime>::from(0).validate(
+						&alice(),
+						&call.clone(),
+						&call.get_dispatch_info(),
+						bytes.len()
+					),
+					Ok(ValidTransaction {
+						priority: 0,
+						requires: vec![],
+						provides: vec![],
+						longevity: 18_446_744_073_709_551_615,
+						propagate: true,
+					})
+				);
+
+				// tips = TipPerWeightStep
+				assert_debug_snapshot!(
+					ChargeTransactionPayment::<Runtime>::from(TipPerWeightStep::get()).validate(
+						&alice(),
+						&call.clone(),
+						&call.get_dispatch_info(),
+						bytes.len()
+					),
+					@r###"
+    Ok(
+        ValidTransaction {
+            priority: 439466,
+            requires: [],
+            provides: [],
+            longevity: 18446744073709551615,
+            propagate: true,
+        },
+    )
+    "###
+				);
+
+				// tips = TipPerWeightStep + 1
+				assert_debug_snapshot!(
+					ChargeTransactionPayment::<Runtime>::from(TipPerWeightStep::get() + 1).validate(
+						&alice(),
+						&call.clone(),
+						&call.get_dispatch_info(),
+						bytes.len()
+					),
+					@r###"
+    Ok(
+        ValidTransaction {
+            priority: 439466,
+            requires: [],
+            provides: [],
+            longevity: 18446744073709551615,
+            propagate: true,
+        },
+    )
+    "###
+				);
+
+				// tips = MaxTipsOfPriority + 1
+				assert_debug_snapshot!(
+					ChargeTransactionPayment::<Runtime>::from(MaxTipsOfPriority::get() + 1).validate(
+						&alice(),
+						&call.clone(),
+						&call.get_dispatch_info(),
+						bytes.len()
+					),
+					@r###"
+    Ok(
+        ValidTransaction {
+            priority: 439466000000,
+            requires: [],
+            provides: [],
+            longevity: 18446744073709551615,
+            propagate: true,
+        },
+    )
+    "###
+				);
+
+				// setup a unsafe cdp
+				set_oracle_price(vec![(NATIVE_CURRENCY, Price::saturating_from_rational(10, 1))]);
+				assert_ok!(CdpEngine::set_collateral_params(
+					RuntimeOrigin::root(),
+					NATIVE_CURRENCY,
+					Change::NewValue(Some(Rate::saturating_from_rational(1, 100000))),
+					Change::NewValue(Some(Ratio::saturating_from_rational(3, 2))),
+					Change::NewValue(Some(Rate::saturating_from_rational(2, 10))),
+					Change::NewValue(Some(Ratio::saturating_from_rational(9, 5))),
+					Change::NewValue(1000 * dollar(AUSD)),
+				));
+				assert_ok!(CdpEngine::adjust_position(
 					&alice(),
-					&call.clone(),
-					&call.get_dispatch_info(),
-					bytes.len()
-				),
-				Ok(ValidTransaction {
-					priority: 0,
-					requires: vec![],
-					provides: vec![],
-					longevity: 18_446_744_073_709_551_615,
-					propagate: true,
-				})
-			);
+					NATIVE_CURRENCY,
+					100 * dollar(NATIVE_CURRENCY) as i128,
+					500 * dollar(AUSD) as i128
+				));
+				set_oracle_price(vec![(NATIVE_CURRENCY, Price::saturating_from_rational(1, 10))]);
 
-			// tips = TipPerWeightStep
-			assert_eq!(
-				ChargeTransactionPayment::<Runtime>::from(TipPerWeightStep::get()).validate(
-					&alice(),
-					&call.clone(),
-					&call.get_dispatch_info(),
-					bytes.len()
-				),
-				Ok(ValidTransaction {
-					priority: 500000,
-					requires: vec![],
-					provides: vec![],
-					longevity: 18_446_744_073_709_551_615,
-					propagate: true,
-				})
-			);
+				// tips = 0
+				// unsigned extrinsic
+				let call = module_cdp_engine::Call::liquidate {
+					currency_id: NATIVE_CURRENCY,
+					who: MultiAddress::Id(alice()),
+				};
 
-			// tips = TipPerWeightStep + 1
-			assert_eq!(
-				ChargeTransactionPayment::<Runtime>::from(TipPerWeightStep::get() + 1).validate(
-					&alice(),
-					&call.clone(),
-					&call.get_dispatch_info(),
-					bytes.len()
-				),
-				Ok(ValidTransaction {
-					priority: 500000,
-					requires: vec![],
-					provides: vec![],
-					longevity: 18_446_744_073_709_551_615,
-					propagate: true,
-				})
-			);
+				assert_eq!(
+					CdpEngine::validate_unsigned(TransactionSource::Local, &call,),
+					Ok(ValidTransaction {
+						priority: 14_999_999_999_000,
+						requires: vec![],
+						provides: vec![("CDPEngineOffchainWorker", 1u8, 0u32, NATIVE_CURRENCY, alice()).encode()],
+						longevity: 64,
+						propagate: true,
+					})
+				);
 
-			// tips = MaxTipsOfPriority + 1
-			assert_eq!(
-				ChargeTransactionPayment::<Runtime>::from(MaxTipsOfPriority::get() + 1).validate(
-					&alice(),
-					&call.clone(),
-					&call.get_dispatch_info(),
-					bytes.len()
-				),
-				Ok(ValidTransaction {
-					priority: 500000000000,
-					requires: vec![],
-					provides: vec![],
-					longevity: 18_446_744_073_709_551_615,
-					propagate: true,
-				})
-			);
+				// tips = 0
+				// operational extrinsic
+				let call = RuntimeCall::Sudo(pallet_sudo::Call::sudo {
+					call: Box::new(module_emergency_shutdown::Call::open_collateral_refund {}.into()),
+				});
+				let bytes = UncheckedExtrinsic::new(call.clone().into(), None)
+					.expect("This should not fail")
+					.encode();
 
-			// tips = 0
-			// unsigned extrinsic
-			let sig = EcdsaSignature::from_slice(&hex!["defda6eef01da2e2a90ce30ba73e90d32204ae84cae782b485f01d16b69061e0381a69cafed3deb6112af044c42ed0f7c73ee0eec7b533334d31a06db50fc40e1b"]).unwrap();
-			let call = ecosystem_renvm_bridge::Call::mint {
-				who: hex!["d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d"].into(),
-				p_hash: hex!["67028f26328144de6ef80b8cd3b05e0cefb488762c340d1574c0542f752996cb"],
-				amount: 93963,
-				n_hash: hex!["f6a75cc370a2dda6dfc8d016529766bb6099d7fa0d787d9fe5d3a7e60c9ac2a0"],
-				sig: sig.clone(),
-			};
-
-			assert_eq!(
-				RenVmBridge::validate_unsigned(
-					TransactionSource::Local,
-					&call,
-				),
-				Ok(ValidTransaction {
-					priority: 14_999_999_997_000,
-					requires: vec![],
-					provides: vec![("renvm-bridge", sig).encode()],
-					longevity: 64,
-					propagate: true,
-				})
-			);
-
-			// tips = 0
-			// operational extrinsic
-			let call = Call::Sudo(pallet_sudo::Call::sudo { call: Box::new(module_emergency_shutdown::Call::open_collateral_refund { }.into()) });
-			let bytes = UncheckedExtrinsic::new(call.clone().into(), None).expect("This should not fail").encode();
-
-			assert_eq!(
-				ChargeTransactionPayment::<Runtime>::from(0).validate(
-					&alice(),
-					&call.clone(),
-					&call.get_dispatch_info(),
-					bytes.len()
-				),
-				Ok(ValidTransaction {
-					priority: 80816889610600000,
-					requires: vec![],
-					provides: vec![],
-					longevity: 18_446_744_073_709_551_615,
-					propagate: true,
-				})
-			);
-
-		});
+				assert_debug_snapshot!(
+					ChargeTransactionPayment::<Runtime>::from(0).validate(
+						&alice(),
+						&call.clone(),
+						&call.get_dispatch_info(),
+						bytes.len()
+					),
+					@r###"
+    Ok(
+        ValidTransaction {
+            priority: 61218482942130000,
+            requires: [],
+            provides: [],
+            longevity: 18446744073709551615,
+            propagate: true,
+        },
+    )
+    "###
+				);
+			});
 	}
 }

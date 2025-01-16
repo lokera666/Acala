@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -27,14 +27,14 @@
 #![allow(clippy::unused_unit)]
 #![allow(clippy::collapsible_if)]
 
-use frame_support::{log, pallet_prelude::*, transactional, PalletId};
-use orml_traits::{Happened, MultiCurrency, MultiCurrencyExtended};
+use frame_support::{pallet_prelude::*, traits::ExistenceRequirement, transactional, PalletId};
+use module_support::{CDPTreasury, RiskManager};
+use orml_traits::{Handler, MultiCurrency, MultiCurrencyExtended};
 use primitives::{Amount, Balance, CurrencyId, Position};
 use sp_runtime::{
 	traits::{AccountIdConversion, Zero},
 	ArithmeticError, DispatchResult,
 };
-use support::{CDPTreasury, RiskManager};
 
 mod mock;
 mod tests;
@@ -47,7 +47,7 @@ pub mod module {
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 
 		/// Currency type for deposit/withdraw collateral assets to/from loans
 		/// module
@@ -70,7 +70,7 @@ pub mod module {
 		type PalletId: Get<PalletId>;
 
 		/// Event handler which calls when update loan.
-		type OnUpdateLoan: Happened<(Self::AccountId, CurrencyId, Amount, Balance)>;
+		type OnUpdateLoan: Handler<(Self::AccountId, CurrencyId, Amount, Balance)>;
 	}
 
 	#[pallet::error]
@@ -122,9 +122,6 @@ pub mod module {
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
-
-	#[pallet::hooks]
-	impl<T: Config> Hooks<T::BlockNumber> for Pallet<T> {}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {}
@@ -192,9 +189,21 @@ impl<T: Config> Pallet<T> {
 		let module_account = Self::account_id();
 
 		if collateral_adjustment.is_positive() {
-			T::Currency::transfer(currency_id, who, &module_account, collateral_balance_adjustment)?;
+			T::Currency::transfer(
+				currency_id,
+				who,
+				&module_account,
+				collateral_balance_adjustment,
+				ExistenceRequirement::AllowDeath,
+			)?;
 		} else if collateral_adjustment.is_negative() {
-			T::Currency::transfer(currency_id, &module_account, who, collateral_balance_adjustment)?;
+			T::Currency::transfer(
+				currency_id,
+				&module_account,
+				who,
+				collateral_balance_adjustment,
+				ExistenceRequirement::AllowDeath,
+			)?;
 		}
 
 		if debit_adjustment.is_positive() {
@@ -311,7 +320,7 @@ impl<T: Config> Pallet<T> {
 			// NOTE: but for KSM loans in Karura, the debit amount was used before,
 			// and the data will been messed up, before migration or calibration,
 			// it is forbidden to turn on incentives for pool LoansIncentive(KSM).
-			T::OnUpdateLoan::happened(&(who.clone(), currency_id, collateral_adjustment, p.collateral));
+			T::OnUpdateLoan::handle(&(who.clone(), currency_id, collateral_adjustment, p.collateral))?;
 			p.collateral = new_collateral;
 			p.debit = new_debit;
 

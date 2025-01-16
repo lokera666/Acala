@@ -1,7 +1,7 @@
-import { expect } from "chai";
+import { expect, beforeAll, it } from "vitest";
 
 import { describeWithAcala, getEvmNonce, transfer } from "./util";
-import { Signer } from "@acala-network/bodhi";
+import { BodhiSigner } from "@acala-network/bodhi";
 import { Wallet } from "@ethersproject/wallet";
 import { encodeAddress } from "@polkadot/keyring";
 import { hexToU8a, u8aConcat, stringToU8a } from "@polkadot/util";
@@ -9,15 +9,14 @@ import { ethers, BigNumber, ContractFactory } from "ethers";
 import Erc20DemoContract from "../build/Erc20DemoContract.json"
 
 describeWithAcala("Acala RPC (Sign eth)", (context) => {
-	let alice: Signer;
+	let alice: BodhiSigner;
 	let signer: Wallet;
 	let subAddr: string;
 	let factory: ContractFactory;
 	let contract: string;
 
-	before("init", async function () {
-		this.timeout(15000);
-		[alice] = await context.provider.getWallets();
+	beforeAll(async function () {
+		[alice] = context.wallets;
 
 		signer = new Wallet(
 			"0x0123456789012345678901234567890123456789012345678901234567890123"
@@ -33,7 +32,7 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 
 		expect(subAddr).to.equal("5EMjsczQH4R2WZaB5Svau8HWZp1aAfMqjxfv3GeLWotYSkLc");
 
-		await transfer(context, await alice.getSubstrateAddress(), subAddr, 10000000000000);
+		await transfer(context, alice.substrateAddress, subAddr, 10000000000000);
 
 		factory = new ethers.ContractFactory(Erc20DemoContract.abi, Erc20DemoContract.bytecode);
 	});
@@ -46,8 +45,6 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 	}
 
 	it("create should sign and verify", async function () {
-		this.timeout(150000);
-
 		const chainId = +context.provider.api.consts.evmAccounts.chainId.toString()
 		const nonce = await getEvmNonce(context.provider, signer.address);
 
@@ -82,10 +79,10 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 
 		expect(rawtx).to.deep.include({
 			nonce: 0,
-			gasPrice: BigNumber.from(200000209209),
-			gasLimit: BigNumber.from(12116000),
+			// gasPrice: BigNumber.from(200000209209),
+			// gasLimit: BigNumber.from(12116000),
 			// to: '0x0000000000000000000000000000000000000000',
-			value: BigNumber.from(0),
+			// value: BigNumber.from(0),
 			data: deploy.data,
 			chainId: 595,
 			// v: 1226,
@@ -96,6 +93,10 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 			type: null
 		});
 
+		expect(rawtx.gasPrice?.toNumber()).to.eq(200000209209);
+		expect(rawtx.gasLimit?.toNumber()).to.eq(12116000);
+		expect(rawtx.value?.toNumber()).to.eq(0);
+
 		// tx data to user input
 		const input_storage_entry_limit = tx_gas_price.and(0xffff);
 		const input_storage_limit = input_storage_entry_limit.mul(64);
@@ -105,7 +106,7 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 
 		const tx = context.provider.api.tx.evm.ethCall(
 			{ Create: null },
-			value.data,
+			value.data as any,
 			value.value,
 			input_gas_limit.toNumber(),
 			input_storage_limit.toNumber(),
@@ -180,8 +181,6 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 	});
 
 	it("call should sign and verify", async function () {
-		this.timeout(150000);
-
 		const chainId = +context.provider.api.consts.evmAccounts.chainId.toString();
 		const nonce = await getEvmNonce(context.provider, signer.address);
 
@@ -217,10 +216,10 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 
 		expect(rawtx).to.deep.include({
 			nonce: 1,
-			gasPrice: BigNumber.from(200000208912),
-			gasLimit: BigNumber.from(722000),
+			// gasPrice: BigNumber.from(200000208912),
+			// gasLimit: BigNumber.from(722000),
 			to: ethers.utils.getAddress(contract),
-			value: BigNumber.from(0),
+			// value: BigNumber.from(0),
 			data: input.data,
 			chainId: 595,
 			// v: 1225,
@@ -230,6 +229,9 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 			// hash: '0x67274cd0347795d0e2986021a19b1347948a0a93e1fb31a315048320fbfcae8a',
 			type: null
 		});
+		expect(rawtx.gasPrice?.toNumber()).to.eq(200000208912);
+		expect(rawtx.gasLimit?.toNumber()).to.eq(722000);
+		expect(rawtx.value?.toNumber()).to.eq(0);
 
 		// tx data to user input
 		const input_storage_entry_limit = tx_gas_price.and(0xffff);
@@ -240,7 +242,7 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 
 		const tx = context.provider.api.tx.evm.ethCall(
 			{ Call: value.to },
-			value.data,
+			value.data as any,
 			value.value,
 			input_gas_limit.toNumber(),
 			input_storage_limit.toNumber(),
@@ -302,7 +304,7 @@ describeWithAcala("Acala RPC (Sign eth)", (context) => {
 		});
 
 		await new Promise(async (resolve) => {
-			context.provider.api.tx.sudo.sudo(context.provider.api.tx.evm.publishFree(contract)).signAndSend(await alice.getSubstrateAddress(), ((result) => {
+			context.provider.api.tx.sudo.sudo(context.provider.api.tx.evm.publishFree(contract)).signAndSend(alice.substrateAddress, ((result) => {
 				if (result.status.isFinalized || result.status.isInBlock) {
 					resolve(undefined);
 				}

@@ -1,6 +1,6 @@
 // This file is part of Acala.
 
-// Copyright (C) 2020-2022 Acala Foundation.
+// Copyright (C) 2020-2025 Acala Foundation.
 // SPDX-License-Identifier: GPL-3.0-or-later WITH Classpath-exception-2.0
 
 // This program is free software: you can redistribute it and/or modify
@@ -21,24 +21,29 @@
 #![cfg(test)]
 
 use super::*;
-use cdp_engine::CollateralCurrencyIds;
 use frame_support::{
-	construct_runtime, ord_parameter_types, parameter_types,
-	traits::{ConstU128, ConstU32, ConstU64, Everything, Nothing},
+	construct_runtime, derive_impl, ord_parameter_types, parameter_types,
+	traits::{ConstU128, ConstU32, ConstU64, Nothing},
 	PalletId,
 };
 use frame_system::{offchain::SendTransactionTypes, EnsureSignedBy};
-use orml_traits::parameter_type_with_key;
-use primitives::{Balance, Moment, ReserveIdentifier, TokenSymbol};
-use sp_core::{crypto::AccountId32, H256};
-use sp_runtime::{
-	testing::{Header, TestXt},
-	traits::{AccountIdConversion, IdentityLookup, One as OneT},
-	FixedPointNumber,
+use module_cdp_engine::CollateralCurrencyIds;
+use module_support::{
+	mocks::{MockStableAsset, TestRandomness},
+	AuctionManager, ExchangeRate, FractionalRate, Price, PriceProvider, Rate, Ratio, SpecificJointsSwap,
 };
-use sp_std::cell::RefCell;
-use support::mocks::MockStableAsset;
-use support::{AuctionManager, ExchangeRate, Price, PriceProvider, Rate, Ratio, SpecificJointsSwap};
+use orml_traits::parameter_type_with_key;
+use primitives::{
+	evm::{convert_decimals_to_evm, EvmAddress},
+	Balance, Moment, ReserveIdentifier, TokenSymbol,
+};
+use sp_core::crypto::AccountId32;
+use sp_runtime::{
+	testing::TestXt,
+	traits::{AccountIdConversion, IdentityLookup, One as OneT},
+	BuildStorage, FixedPointNumber,
+};
+use sp_std::str::FromStr;
 
 mod honzon {
 	pub use super::super::*;
@@ -53,34 +58,15 @@ pub const BOB: AccountId = AccountId32::new([2u8; 32]);
 pub const CAROL: AccountId = AccountId32::new([3u8; 32]);
 pub const ACA: CurrencyId = CurrencyId::Token(TokenSymbol::ACA);
 pub const AUSD: CurrencyId = CurrencyId::Token(TokenSymbol::AUSD);
-pub const BTC: CurrencyId = CurrencyId::Token(TokenSymbol::RENBTC);
+pub const BTC: CurrencyId = CurrencyId::ForeignAsset(255);
 pub const DOT: CurrencyId = CurrencyId::Token(TokenSymbol::DOT);
 
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig as frame_system::DefaultConfig)]
 impl frame_system::Config for Runtime {
-	type Origin = Origin;
-	type Index = u64;
-	type BlockNumber = BlockNumber;
-	type Call = Call;
-	type Hash = H256;
-	type Hashing = ::sp_runtime::traits::BlakeTwo256;
 	type AccountId = AccountId;
 	type Lookup = IdentityLookup<Self::AccountId>;
-	type Header = Header;
-	type Event = Event;
-	type BlockHashCount = ConstU64<250>;
-	type BlockWeights = ();
-	type BlockLength = ();
-	type Version = ();
-	type PalletInfo = PalletInfo;
+	type Block = Block;
 	type AccountData = pallet_balances::AccountData<Balance>;
-	type OnNewAccount = ();
-	type OnKilledAccount = ();
-	type DbWeight = ();
-	type BaseCallFilter = Everything;
-	type SystemWeightInfo = ();
-	type SS58Prefix = ();
-	type OnSetCode = ();
-	type MaxConsumers = ConstU32<16>;
 }
 
 parameter_type_with_key! {
@@ -90,31 +76,33 @@ parameter_type_with_key! {
 }
 
 impl orml_tokens::Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Balance = Balance;
 	type Amount = Amount;
 	type CurrencyId = CurrencyId;
 	type WeightInfo = ();
 	type ExistentialDeposits = ExistentialDeposits;
-	type OnDust = ();
+	type CurrencyHooks = ();
 	type MaxLocks = ();
 	type MaxReserves = ();
 	type ReserveIdentifier = ReserveIdentifier;
 	type DustRemovalWhitelist = Nothing;
-	type OnNewTokenAccount = ();
-	type OnKilledTokenAccount = ();
 }
 
 impl pallet_balances::Config for Runtime {
 	type Balance = Balance;
 	type DustRemoval = ();
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type ExistentialDeposit = ConstU128<1>;
 	type AccountStore = frame_system::Pallet<Runtime>;
 	type MaxLocks = ();
 	type MaxReserves = ConstU32<50>;
 	type ReserveIdentifier = ReserveIdentifier;
 	type WeightInfo = ();
+	type RuntimeHoldReason = RuntimeHoldReason;
+	type RuntimeFreezeReason = RuntimeFreezeReason;
+	type FreezeIdentifier = ();
+	type MaxFreezes = ();
 }
 pub type AdaptedBasicCurrency = orml_currencies::BasicCurrencyAdapter<Runtime, PalletBalances, Amount, BlockNumber>;
 
@@ -133,8 +121,8 @@ parameter_types! {
 	pub const LoansPalletId: PalletId = PalletId(*b"aca/loan");
 }
 
-impl loans::Config for Runtime {
-	type Event = Event;
+impl module_loans::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Tokens;
 	type RiskManager = CDPEngineModule;
 	type CDPTreasury = CDPTreasuryModule;
@@ -181,18 +169,18 @@ impl AuctionManager<AccountId> for MockAuctionManager {
 	}
 }
 
-thread_local! {
-	static IS_SHUTDOWN: RefCell<bool> = RefCell::new(false);
+parameter_types! {
+	static IsShutdown: bool = false;
 }
 
 pub fn mock_shutdown() {
-	IS_SHUTDOWN.with(|v| *v.borrow_mut() = true)
+	IsShutdown::mutate(|v| *v = true)
 }
 
 pub struct MockEmergencyShutdown;
 impl EmergencyShutdown for MockEmergencyShutdown {
 	fn is_shutdown() -> bool {
-		IS_SHUTDOWN.with(|v| *v.borrow_mut())
+		IsShutdown::get()
 	}
 }
 
@@ -209,8 +197,8 @@ parameter_types! {
 	];
 }
 
-impl cdp_treasury::Config for Runtime {
-	type Event = Event;
+impl module_cdp_treasury::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = Currencies;
 	type GetStableCurrencyId = GetStableCurrencyId;
 	type AuctionManagerHandler = MockAuctionManager;
@@ -231,13 +219,55 @@ impl pallet_timestamp::Config for Runtime {
 	type WeightInfo = ();
 }
 
-impl evm_accounts::Config for Runtime {
-	type Event = Event;
+impl module_evm_accounts::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = PalletBalances;
 	type ChainId = ();
-	type AddressMapping = evm_accounts::EvmAddressMapping<Runtime>;
+	type AddressMapping = module_evm_accounts::EvmAddressMapping<Runtime>;
 	type TransferAll = Currencies;
 	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub NetworkContractSource: EvmAddress = EvmAddress::from_str("1000000000000000000000000000000000000001").unwrap();
+}
+
+ord_parameter_types! {
+	pub const CouncilAccount: AccountId = AccountId::from([1u8; 32]);
+	pub const NetworkContractAccount: AccountId = AccountId::from([0u8; 32]);
+	pub const StorageDepositPerByte: u128 = convert_decimals_to_evm(10);
+}
+
+impl module_evm::Config for Runtime {
+	type AddressMapping = module_evm_accounts::EvmAddressMapping<Runtime>;
+	type Currency = PalletBalances;
+	type TransferAll = ();
+	type NewContractExtraBytes = ConstU32<1>;
+	type StorageDepositPerByte = StorageDepositPerByte;
+	type TxFeePerGas = ConstU128<10>;
+	type RuntimeEvent = RuntimeEvent;
+	type PrecompilesType = ();
+	type PrecompilesValue = ();
+	type GasToWeight = ();
+	type ChargeTransactionPayment = module_support::mocks::MockReservedTransactionPayment<PalletBalances>;
+	type NetworkContractOrigin = EnsureSignedBy<NetworkContractAccount, AccountId>;
+	type NetworkContractSource = NetworkContractSource;
+
+	type DeveloperDeposit = ConstU128<1000>;
+	type PublicationFee = ConstU128<200>;
+	type TreasuryAccount = TreasuryAccount;
+	type FreePublicationOrigin = EnsureSignedBy<CouncilAccount, AccountId>;
+
+	type Runner = module_evm::runner::stack::Runner<Self>;
+	type FindAuthor = ();
+	type Randomness = TestRandomness<Self>;
+	type Task = ();
+	type IdleScheduler = ();
+	type WeightInfo = ();
+}
+
+impl module_evm_bridge::Config for Runtime {
+	type EVM = EVM;
 }
 
 parameter_type_with_key! {
@@ -249,14 +279,15 @@ parameter_type_with_key! {
 parameter_types! {
 	pub DefaultLiquidationRatio: Ratio = Ratio::saturating_from_rational(3, 2);
 	pub DefaultDebitExchangeRate: ExchangeRate = ExchangeRate::saturating_from_rational(1, 10);
-	pub DefaultLiquidationPenalty: Rate = Rate::saturating_from_rational(10, 100);
+	pub DefaultLiquidationPenalty: FractionalRate = FractionalRate::try_from(Rate::saturating_from_rational(10, 100)).unwrap();
 	pub MaxSwapSlippageCompareToOracle: Ratio = Ratio::saturating_from_rational(50, 100);
 	pub MaxLiquidationContractSlippage: Ratio = Ratio::saturating_from_rational(80, 100);
 	pub const CDPEnginePalletId: PalletId = PalletId(*b"aca/cdpe");
+	pub const SettleErc20EvmOrigin: AccountId = AccountId32::new([255u8; 32]);
 }
 
-impl cdp_engine::Config for Runtime {
-	type Event = Event;
+impl module_cdp_engine::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
 	type PriceSource = MockPriceSource;
 	type DefaultLiquidationRatio = DefaultLiquidationRatio;
 	type DefaultDebitExchangeRate = DefaultDebitExchangeRate;
@@ -277,16 +308,17 @@ impl cdp_engine::Config for Runtime {
 	type MaxLiquidationContracts = ConstU32<10>;
 	type LiquidationEvmBridge = ();
 	type PalletId = CDPEnginePalletId;
-	type EvmAddressMapping = evm_accounts::EvmAddressMapping<Runtime>;
+	type EvmAddressMapping = module_evm_accounts::EvmAddressMapping<Runtime>;
 	type Swap = SpecificJointsSwap<(), AlternativeSwapPathJointList>;
+	type EVMBridge = module_evm_bridge::EVMBridge<Runtime>;
+	type SettleErc20EvmOrigin = SettleErc20EvmOrigin;
 	type WeightInfo = ();
 }
 
-type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Runtime>;
 type Block = frame_system::mocking::MockBlock<Runtime>;
 
 impl Config for Runtime {
-	type Event = Event;
+	type RuntimeEvent = RuntimeEvent;
 	type Currency = PalletBalances;
 	type DepositPerAuthorization = ConstU128<100>;
 	type CollateralCurrencyIds = CollateralCurrencyIds<Runtime>;
@@ -294,32 +326,30 @@ impl Config for Runtime {
 }
 
 construct_runtime!(
-	pub enum Runtime where
-		Block = Block,
-		NodeBlock = Block,
-		UncheckedExtrinsic = UncheckedExtrinsic,
-	{
-		System: frame_system::{Pallet, Call, Storage, Config, Event<T>},
-		HonzonModule: honzon::{Pallet, Storage, Call, Event<T>},
-		Tokens: orml_tokens::{Pallet, Storage, Event<T>, Config<T>},
-		PalletBalances: pallet_balances::{Pallet, Call, Storage, Event<T>},
-		Currencies: orml_currencies::{Pallet, Call},
-		LoansModule: loans::{Pallet, Storage, Call, Event<T>},
-		CDPTreasuryModule: cdp_treasury::{Pallet, Storage, Call, Event<T>},
-		CDPEngineModule: cdp_engine::{Pallet, Storage, Call, Event<T>, Config, ValidateUnsigned},
-		Timestamp: pallet_timestamp::{Pallet, Call, Storage, Inherent},
-		EvmAccounts: evm_accounts::{Pallet, Call, Storage, Event<T>},
+	pub enum Runtime {
+		System: frame_system,
+		HonzonModule: honzon,
+		Tokens: orml_tokens,
+		PalletBalances: pallet_balances,
+		Currencies: orml_currencies,
+		LoansModule: module_loans,
+		CDPTreasuryModule: module_cdp_treasury,
+		CDPEngineModule: module_cdp_engine,
+		Timestamp: pallet_timestamp,
+		EvmAccounts: module_evm_accounts,
+		EVM: module_evm,
+		EVMBridge: module_evm_bridge,
 	}
 );
 
 /// An extrinsic type used for tests.
-pub type Extrinsic = TestXt<Call, ()>;
+pub type Extrinsic = TestXt<RuntimeCall, ()>;
 
 impl<LocalCall> SendTransactionTypes<LocalCall> for Runtime
 where
-	Call: From<LocalCall>,
+	RuntimeCall: From<LocalCall>,
 {
-	type OverarchingCall = Call;
+	type OverarchingCall = RuntimeCall;
 	type Extrinsic = Extrinsic;
 }
 
@@ -344,8 +374,8 @@ impl Default for ExtBuilder {
 
 impl ExtBuilder {
 	pub fn build(self) -> sp_io::TestExternalities {
-		let mut t = frame_system::GenesisConfig::default()
-			.build_storage::<Runtime>()
+		let mut t = frame_system::GenesisConfig::<Runtime>::default()
+			.build_storage()
 			.unwrap();
 
 		pallet_balances::GenesisConfig::<Runtime> {
